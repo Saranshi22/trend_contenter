@@ -27,11 +27,16 @@ from ...domain.models.content_studio import (
     GenerateVideoRequest,
     GenerateVideoResponse,
     OpportunityConceptsRequest,
+    RecommendImagesRequest,
+    RecommendImagesResponse,
 )
 from ...domain.models.user import User
 from ...security.auth import require_permission
+from ...services.content_studio.gemini_client import has_gemini_credentials
 from ...services.content_studio.concept_service import concept_service
 from ...services.content_studio.gemini_service import gemini_service
+from ...services.content_studio.search_service import search_service
+from ...services.content_studio.reranker_service import reranker_service
 from ...services.content_studio.typography_service import TypographyService
 from ...services.content_studio.veo_service import veo_service
 from ...services.pdf_service import PDFService
@@ -68,12 +73,12 @@ def _fail(endpoint: str, exc: Exception) -> HTTPException:
 async def content_studio_health(current_user: User = Depends(require_read)):
     """Reports which generation models are configured and whether a Gemini key is present."""
     return {
-        "has_gemini_key": bool(settings.GEMINI_API_KEY),
+        "has_gemini_key": has_gemini_credentials(),
         "models": {
             "text": settings.GEMINI_TEXT_MODEL,
             "image_generation": settings.GEMINI_IMAGE_MODEL,
             "image_editing": settings.GEMINI_IMAGE_EDIT_MODEL,
-            "video_generation": settings.VEO_MODEL,
+            "video_generation": settings.GEMINI_VIDEO_MODEL or settings.VEO_MODEL,
         },
     }
 
@@ -232,6 +237,41 @@ async def analyze_image(req: AnalyzeImageRequest, current_user: User = Depends(r
         return await run_in_threadpool(gemini_service.analyze_image, req)
     except Exception as e:
         raise _fail("/images/analyze", e)
+
+
+@router.post("/images/recommend", response_model=RecommendImagesResponse, responses=HTTP_500_RESPONSE)
+async def recommend_images(req: RecommendImagesRequest, current_user: User = Depends(require_read)):
+    """
+    Image Recommendation Engine:
+    1. Searches candidate imagery using Google Search Image API (SerpApi / CSE / Web).
+    2. Uses Gemini Multimodal Reranker to score relevance, aesthetics, and editorial alignment.
+    """
+    try:
+        candidates = await search_service.search_images(
+            query=req.prompt,
+            num_results=max(req.num_results * 2, 12),
+            provider=req.search_provider or "auto",
+            serpapi_key=req.serpapi_key,
+            google_cse_key=req.google_cse_key,
+            google_cse_id=req.google_cse_id,
+        )
+
+        ranked_items = await reranker_service.rerank(
+            prompt=req.prompt,
+            candidates=candidates,
+            model_type=req.reranker_model or "hybrid",
+            gemini_api_key=req.gemini_api_key,
+            base_url=req.base_url,
+        )
+
+        return RecommendImagesResponse(
+            prompt=req.prompt,
+            total_candidates=len(candidates),
+            reranker_model=req.reranker_model or "gemini",
+            recommendations=ranked_items[:req.num_results],
+        )
+    except Exception as e:
+        raise _fail("/images/recommend", e)
 
 
 # ---------------------------------------------------------------------------

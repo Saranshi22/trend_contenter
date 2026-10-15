@@ -77,7 +77,7 @@ async def test_health_reports_models(client):
     body = res.json()
     assert body["has_gemini_key"] is False
     assert body["models"]["image_generation"] == settings.GEMINI_IMAGE_MODEL
-    assert body["models"]["video_generation"] == settings.VEO_MODEL
+    assert body["models"]["video_generation"] in [settings.GEMINI_VIDEO_MODEL, settings.VEO_MODEL]
 
 
 @pytest.mark.asyncio
@@ -188,4 +188,5 @@ async def test_viewer_cannot_generate(client):
         allowed = await c.get(f"{BASE}/health")
     assert denied.status_code == 403
     assert allowed.status_code == 200
+
 

@@ -4,7 +4,8 @@ import type {
   GenerateConceptsResponse, 
   ContentConceptItem, 
   GeneratedImageItem, 
-  GenerateVideoResponse 
+  GenerateVideoResponse,
+  RecommendImagesResponse
 } from '../types';
 import { API_BASE } from '../apiConfig';
 import {
@@ -19,7 +20,8 @@ import {
   IconDownload,
   IconCopy,
   IconUpload,
-  IconAlertTriangle
+  IconAlertTriangle,
+  IconSearch
 } from '../components/Icons';
 
 interface ContentStudioPageProps {
@@ -28,7 +30,7 @@ interface ContentStudioPageProps {
   onDownloadPdf: (oppId: string) => void;
 }
 
-type StudioTab = 'concepts' | 'images' | 'videos' | 'editor';
+type StudioTab = 'concepts' | 'images' | 'videos' | 'editor' | 'recommend';
 
 const STYLE_PRESETS = [
   { id: 'none', label: 'Default' },
@@ -47,6 +49,20 @@ const VIDEO_CINEMATOGRAPHY_PRESETS = [
   'Macro slow-motion 120fps, crisp droplets and reflections',
   'Low-angle dramatic tilt up with volumetric light beams'
 ];
+
+const resolveImageSrc = (src?: string | null): string => {
+  if (!src) return '';
+  let cleaned = src.trim();
+  // Strip duplicate nested prefixes if stacked: e.g. "data:image/png;base64,data:image/png;base64,..."
+  while (cleaned.startsWith('data:') && cleaned.indexOf('data:', 5) !== -1) {
+    const nextIdx = cleaned.indexOf('data:', 5);
+    cleaned = cleaned.substring(nextIdx);
+  }
+  if (cleaned.startsWith('data:') || cleaned.startsWith('http://') || cleaned.startsWith('https://') || cleaned.startsWith('/')) {
+    return cleaned;
+  }
+  return `data:image/png;base64,${cleaned}`;
+};
 
 export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
   opportunities,
@@ -86,7 +102,6 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
   const [videoNegativePrompt, setVideoNegativePrompt] = useState<string>('');
   const [videoAspectRatio, setVideoAspectRatio] = useState<string>('16:9');
   const [videoDuration, setVideoDuration] = useState<number>(5);
-  const [videoFps, setVideoFps] = useState<number>(24);
   const [videoStartImageBase64, setVideoStartImageBase64] = useState<string | null>(null);
   const [isGeneratingVideo, setIsGeneratingVideo] = useState<boolean>(false);
   const [generatedVideo, setGeneratedVideo] = useState<GenerateVideoResponse | null>(null);
@@ -113,6 +128,13 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
   const [isDrawing, setIsDrawing] = useState<boolean>(false);
   const [brushSize, setBrushSize] = useState<number>(30);
   const [hasDrawnMask, setHasDrawnMask] = useState<boolean>(false);
+
+  // Image Recommender State
+  const [recPrompt, setRecPrompt] = useState<string>('');
+  const [recProvider, setRecProvider] = useState<string>('auto');
+  const [recCount, setRecCount] = useState<number>(8);
+  const [isRecommending, setIsRecommending] = useState<boolean>(false);
+  const [recResponse, setRecResponse] = useState<RecommendImagesResponse | null>(null);
 
   // Helper for Toasts
   const notify = (text: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -341,7 +363,6 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
         negative_prompt: videoNegativePrompt || undefined,
         aspect_ratio: videoAspectRatio,
         duration_seconds: videoDuration,
-        fps: videoFps,
         enhance_prompt: false
       };
 
@@ -402,13 +423,14 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
       if (!ctx) return;
 
       const img = new window.Image();
+      img.crossOrigin = 'anonymous';
       img.onload = () => {
         canvas.width = img.width;
         canvas.height = img.height;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0);
       };
-      img.src = `data:image/png;base64,${editorSourceImage}`;
+      img.src = resolveImageSrc(editorSourceImage);
     }
   }, [activeTab, editorSourceImage]);
 
@@ -450,13 +472,14 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
     if (!ctx) return;
 
     const img = new window.Image();
+    img.crossOrigin = 'anonymous';
     img.onload = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0);
       setHasDrawnMask(false);
       notify('Mask cleared', 'info');
     };
-    img.src = `data:image/png;base64,${editorSourceImage}`;
+    img.src = resolveImageSrc(editorSourceImage);
   };
 
   // Execute Edit or Typography
@@ -535,6 +558,58 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
       setHasDrawnMask(false);
       notify('Adopted edited image as new base layer!', 'success');
     }
+  };
+
+  // Image Recommender Handlers
+  const handleRecommendImages = async () => {
+    if (!recPrompt.trim()) {
+      notify('Please enter a search prompt for recommendations.', 'error');
+      return;
+    }
+
+    setIsRecommending(true);
+    try {
+      const res = await fetch(`${API_BASE}/content-studio/images/recommend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: recPrompt,
+          search_provider: recProvider,
+          num_results: recCount
+        })
+      });
+
+      if (res.ok) {
+        const data: RecommendImagesResponse = await res.json();
+        setRecResponse(data);
+        notify(`Ranked ${data.recommendations.length} visuals with Gemini Reranker!`, 'success');
+      } else {
+        const err = await res.json();
+        notify(`Recommendation failed: ${err.detail || 'Server error'}`, 'error');
+      }
+    } catch (err) {
+      console.error(err);
+      notify('Network error fetching recommendations.', 'error');
+    } finally {
+      setIsRecommending(false);
+    }
+  };
+
+  const handleTransferRecToEditor = (imgUrl: string) => {
+    setEditorSourceImage(imgUrl);
+    setEditorResultImage(null);
+    setHasDrawnMask(false);
+    setActiveTab('editor');
+    notify('Loaded recommended image into Smart Editor!', 'info');
+  };
+
+  const handleTransferRecToVideo = (imgUrl: string, promptText?: string) => {
+    setVideoStartImageBase64(imgUrl);
+    if (promptText) {
+      setVideoPrompt(`Cinematic camera motion, dynamic lighting: ${promptText}`);
+    }
+    setActiveTab('videos');
+    notify('Loaded recommended image as seed for Video Studio!', 'info');
   };
 
   return (
@@ -688,7 +763,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
           onClick={() => setActiveTab('videos')}
         >
           <IconVideo size={16} />
-          <span>🎬 Video Studio (Veo 2)</span>
+          <span>🎬 Video Studio (Google Veo)</span>
         </button>
         <button
           className={`tab-btn ${activeTab === 'editor' ? 'active' : ''}`}
@@ -696,6 +771,13 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
         >
           <IconBrush size={16} />
           <span>✨ Smart Editor &amp; Typography</span>
+        </button>
+        <button
+          className={`tab-btn ${activeTab === 'recommend' ? 'active' : ''}`}
+          onClick={() => setActiveTab('recommend')}
+        >
+          <IconSearch size={16} />
+          <span>🔍 Image Recommender</span>
         </button>
       </div>
 
@@ -1104,7 +1186,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                   >
                     <div style={{ background: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <img
-                        src={`data:image/png;base64,${img.image_base64}`}
+                        src={resolveImageSrc(img.image_base64 || img.url)}
                         alt={img.enhanced_prompt || 'Generated Asset'}
                         style={{ width: '100%', height: 'auto', maxHeight: '420px', objectFit: 'contain' }}
                       />
@@ -1122,7 +1204,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
 
                       <div style={{ display: 'flex', gap: '6px' }}>
                         <a
-                          href={`data:image/png;base64,${img.image_base64}`}
+                          href={resolveImageSrc(img.image_base64 || img.url)}
                           download={`gemini_asset_${img.id.slice(0, 6)}.png`}
                           className="btn-outline"
                           style={{ padding: '6px 12px', fontSize: '0.82rem' }}
@@ -1159,10 +1241,10 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                 <h3 style={{ fontSize: '1.2rem', color: 'var(--text-primary)', fontWeight: 600, margin: 0 }}>
                   Google Veo Video Studio
                 </h3>
-                <span className="badge badge-amber">veo-2.0-generate-001</span>
+                <span className="badge badge-amber">Google Veo</span>
               </div>
               <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0 }}>
-                High-definition, continuous video generation powered by Google's state-of-the-art Veo models.
+                High-definition cinematographic video generation powered by Google's state-of-the-art Veo models.
               </p>
             </div>
 
@@ -1237,18 +1319,6 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
               </div>
 
               <div>
-                <label className="subheading-label">Frame Rate</label>
-                <select
-                  className="select-glass"
-                  value={videoFps}
-                  onChange={(e) => setVideoFps(parseInt(e.target.value))}
-                >
-                  <option value={24}>24 fps (Cinematic)</option>
-                  <option value={30}>30 fps (Broadcast)</option>
-                </select>
-              </div>
-
-              <div>
                 <label className="subheading-label">Optional Image Seed</label>
                 <input
                   type="file"
@@ -1290,7 +1360,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                 disabled={isGeneratingVideo || !videoPrompt.trim()}
               >
                 <IconVideo size={16} />
-                <span>{isGeneratingVideo ? 'Generating Video with Veo...' : 'Generate with Google Veo'}</span>
+                <span>{isGeneratingVideo ? 'Generating Video with Google Veo...' : 'Generate with Google Veo'}</span>
               </button>
             </div>
           </div>
@@ -1301,10 +1371,10 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <div>
                   <h3 style={{ fontSize: '1.15rem', color: 'var(--text-primary)', fontWeight: 600, margin: 0 }}>
-                    Veo Cinematic Generation Result
+                    Google Veo Video Result
                   </h3>
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    Duration: {generatedVideo.duration_seconds}s | Aspect Ratio: {generatedVideo.aspect_ratio} | FPS: {generatedVideo.fps}
+                    Duration: {generatedVideo.duration_seconds}s | Aspect Ratio: {generatedVideo.aspect_ratio}
                   </span>
                 </div>
                 <span className="badge badge-amber">{generatedVideo.model_used}</span>
@@ -1599,7 +1669,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                   <div style={{ background: '#0F172A', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-subtle)', minHeight: '280px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {editorResultImage ? (
                       <img
-                        src={`data:image/png;base64,${editorResultImage}`}
+                        src={resolveImageSrc(editorResultImage)}
                         alt="Edited Result"
                         style={{ maxWidth: '100%', height: 'auto', display: 'block' }}
                       />
@@ -1657,7 +1727,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                 <div style={{ display: 'flex', gap: '10px' }}>
                   {editorResultImage && (
                     <a
-                      href={`data:image/png;base64,${editorResultImage}`}
+                      href={resolveImageSrc(editorResultImage)}
                       download="edited_content_asset.png"
                       className="btn-outline"
                       style={{ padding: '8px 16px', fontSize: '0.85rem' }}
@@ -1687,6 +1757,216 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* TAB 5: IMAGE RECOMMENDATION ENGINE                             */}
+      {/* ============================================================== */}
+      {activeTab === 'recommend' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div className="glass-card">
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <h3 style={{ fontSize: '1.2rem', color: 'var(--text-primary)', fontWeight: 600, margin: 0 }}>
+                  Image Recommendation Engine
+                </h3>
+                <span className="badge badge-purple">Google Images &amp; Gemini Reranker</span>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0 }}>
+                Searches live imagery via Google Search Image API / SerpApi and reranks candidates with Gemini for aesthetic appeal, trend relevance, and audience alignment.
+              </p>
+            </div>
+
+            {/* Search Input Bar */}
+            <div style={{ marginBottom: '16px' }}>
+              <label className="subheading-label">Visual Intent / Search Prompt</label>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <input
+                  type="text"
+                  className="input-glass"
+                  placeholder="e.g. Sustainable modern bamboo architecture in lush tropical forest, minimalist aesthetic..."
+                  value={recPrompt}
+                  onChange={(e) => setRecPrompt(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleRecommendImages()}
+                  style={{ flex: 1 }}
+                />
+                <button
+                  className="btn-primary"
+                  style={{ padding: '0 20px', height: '42px', flexShrink: 0 }}
+                  onClick={handleRecommendImages}
+                  disabled={isRecommending || !recPrompt.trim()}
+                >
+                  <IconSearch size={16} />
+                  <span>{isRecommending ? 'Searching & Reranking...' : 'Search & Rerank'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Inspiration Pills */}
+            <div style={{ marginBottom: '16px' }}>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginRight: '8px' }}>Suggestions:</span>
+              {[
+                'CBD tincture minimal luxury cosmetic packaging studio shot',
+                'Futuristic electric vehicle charging station neon night',
+                'Artisan pour-over coffee bar with warm golden hour morning light',
+                'High-tech biometric smartwatch health tracking dashboard'
+              ].map((sugg, idx) => (
+                <button
+                  key={idx}
+                  className="badge badge-neutral"
+                  style={{ cursor: 'pointer', margin: '2px 4px', border: '1px solid var(--border-subtle)', background: 'transparent' }}
+                  onClick={() => setRecPrompt(sugg)}
+                >
+                  {sugg.length > 40 ? sugg.slice(0, 38) + '...' : sugg}
+                </button>
+              ))}
+            </div>
+
+            {/* Controls Grid */}
+            <div className="grid-2" style={{ paddingTop: '12px', borderTop: '1px solid var(--border-subtle)' }}>
+              <div>
+                <label className="subheading-label">Search Provider</label>
+                <select
+                  className="select-glass"
+                  value={recProvider}
+                  onChange={(e) => setRecProvider(e.target.value)}
+                >
+                  <option value="auto">Auto (SerpApi Google Images with Fallback)</option>
+                  <option value="serpapi">SerpApi (Google Images Engine)</option>
+                  <option value="google_cse">Google CSE (Custom Search Engine)</option>
+                  <option value="web">Web Fallback (DuckDuckGo / Unsplash)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="subheading-label">Top Ranked Recommendations</label>
+                <select
+                  className="select-glass"
+                  value={recCount}
+                  onChange={(e) => setRecCount(parseInt(e.target.value))}
+                >
+                  <option value={4}>Top 4 Visuals</option>
+                  <option value={8}>Top 8 Visuals</option>
+                  <option value={12}>Top 12 Visuals</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Recommendation Results */}
+          {recResponse && (
+            <div className="glass-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <h3 style={{ fontSize: '1.15rem', color: 'var(--text-primary)', fontWeight: 600, margin: 0 }}>
+                    Ranked Recommendations ({recResponse.recommendations.length})
+                  </h3>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                    Evaluated from {recResponse.total_candidates} candidates for "{recResponse.prompt}"
+                  </span>
+                </div>
+                <span className="badge badge-cyan">Reranker: {recResponse.reranker_model}</span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+                {recResponse.recommendations.map((item, i) => (
+                  <div
+                    key={item.id || i}
+                    style={{
+                      background: '#FFFFFF',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: '10px',
+                      overflow: 'hidden',
+                      boxShadow: 'var(--shadow-sm)',
+                      display: 'flex',
+                      flexDirection: 'column'
+                    }}
+                  >
+                    {/* Thumbnail */}
+                    <div style={{ position: 'relative', width: '100%', height: '200px', background: '#0F172A', overflow: 'hidden' }}>
+                      <img
+                        src={resolveImageSrc(item.thumbnail_url || item.image_url)}
+                        alt={item.title}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                      <div style={{ position: 'absolute', top: '8px', right: '8px', display: 'flex', gap: '4px' }}>
+                        <span className="badge badge-emerald" style={{ fontWeight: 700, fontSize: '0.75rem', boxShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
+                          {Math.round(item.overall_score * 100)}% Match
+                        </span>
+                      </div>
+                      <div style={{ position: 'absolute', bottom: '8px', left: '8px', background: 'rgba(0,0,0,0.65)', color: '#FFFFFF', padding: '2px 8px', borderRadius: '4px', fontSize: '0.72rem' }}>
+                        {item.source_domain}
+                      </div>
+                    </div>
+
+                    {/* Metadata & Scores */}
+                    <div style={{ padding: '14px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                      <div>
+                        <h4 style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 6px 0', lineHeight: 1.3 }}>
+                          {item.title}
+                        </h4>
+
+                        {item.reasoning && (
+                          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', background: 'var(--surface-secondary)', padding: '6px 10px', borderRadius: '6px', marginBottom: '10px', fontStyle: 'italic', borderLeft: '3px solid #6366F1' }}>
+                            "{item.reasoning}"
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                          <span className="badge badge-blue" style={{ fontSize: '0.68rem' }}>
+                            Relevance: {Math.round(item.relevance_score * 100)}%
+                          </span>
+                          {item.aesthetic_score != null && (
+                            <span className="badge badge-purple" style={{ fontSize: '0.68rem' }}>
+                              Aesthetic: {Math.round(item.aesthetic_score * 100)}%
+                            </span>
+                          )}
+                          {item.tags?.map((tag, tIdx) => (
+                            <span key={tIdx} className="badge badge-neutral" style={{ fontSize: '0.68rem' }}>
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div style={{ display: 'flex', gap: '6px', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)', flexWrap: 'wrap' }}>
+                        <button
+                          className="btn-primary"
+                          style={{ fontSize: '0.76rem', padding: '6px 10px', flex: 1 }}
+                          onClick={() => handleTransferRecToEditor(item.image_url || item.thumbnail_url)}
+                          title="Transfer to Smart Editor for Inpainting or Typography"
+                        >
+                          <IconBrush size={12} />
+                          <span>Smart Editor</span>
+                        </button>
+                        <button
+                          className="btn-outline"
+                          style={{ fontSize: '0.76rem', padding: '6px 10px', flex: 1 }}
+                          onClick={() => handleTransferRecToVideo(item.image_url || item.thumbnail_url, item.title)}
+                          title="Use as seed image for Google Veo video"
+                        >
+                          <IconVideo size={12} />
+                          <span>Animate (Veo)</span>
+                        </button>
+                        <a
+                          href={item.image_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn-outline"
+                          style={{ fontSize: '0.76rem', padding: '6px 10px' }}
+                          title="Open original image URL"
+                        >
+                          <IconDownload size={12} />
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

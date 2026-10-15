@@ -13,22 +13,28 @@ settings.CONTENT_STUDIO_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 def clean_base64_string(b64_str: str) -> Tuple[bytes, str]:
     """
     Extracts binary image bytes and mime type from data URI or raw base64.
+    Safely unwraps any nested or duplicate data URI prefixes.
     """
     mime_type = "image/png"
-    if "," in b64_str:
-        header, b64_data = b64_str.split(",", 1)
-        match = re.search(r"data:([^;]+);base64", header)
-        if match:
-            mime_type = match.group(1)
-    else:
-        b64_data = b64_str
+    cleaned = b64_str.strip()
+    while cleaned.startswith("data:"):
+        if "," in cleaned:
+            header, cleaned = cleaned.split(",", 1)
+            match = re.search(r"data:([^;]+);base64", header)
+            if match:
+                mime_type = match.group(1)
+        else:
+            break
+
+    # Remove any stray whitespace or newlines
+    cleaned = re.sub(r"\s+", "", cleaned)
 
     # Pad if necessary
-    padding = len(b64_data) % 4
+    padding = len(cleaned) % 4
     if padding:
-        b64_data += "=" * (4 - padding)
+        cleaned += "=" * (4 - padding)
 
-    image_bytes = base64.b64decode(b64_data)
+    image_bytes = base64.b64decode(cleaned)
     return image_bytes, mime_type
 
 def base64_to_pil(b64_str: str) -> Image.Image:

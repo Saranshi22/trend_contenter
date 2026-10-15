@@ -7,6 +7,7 @@ import google.genai as genai
 from google.genai import types
 
 from ...config import settings
+from .gemini_client import get_gemini_client
 from ...domain.models.content_studio import (
     GenerateImageRequest,
     GenerateImageResponse,
@@ -26,7 +27,6 @@ from .image_utils import (
     pil_to_base64,
     base64_to_pil
 )
-from .mock_data import generate_demo_canvas
 
 logger = logging.getLogger(__name__)
 
@@ -44,18 +44,13 @@ class GeminiImageService:
     def __init__(self):
         pass
 
-    def _get_client(self, api_key_override: Optional[str] = None) -> genai.Client:
-        key = api_key_override or settings.GEMINI_API_KEY
-        if not key:
-            raise ValueError(
-                "Gemini API Key is missing. Please set GEMINI_API_KEY in your environment, .env file, or pass it via settings."
-            )
-        return genai.Client(api_key=key)
+    def _get_client(self, api_key_override: Optional[str] = None, base_url_override: Optional[str] = None) -> genai.Client:
+        return get_gemini_client(api_key_override=api_key_override, base_url_override=base_url_override)
 
     def enhance_prompt(self, req: EnhancePromptRequest) -> EnhancePromptResponse:
         """Uses Gemini models to expand a prompt for optimal Gemini image generation."""
         try:
-            client = self._get_client(req.api_key)
+            client = self._get_client(req.api_key, getattr(req, "base_url", None))
             style_hint = f" Target style: {req.style_preset}." if req.style_preset and req.style_preset != "none" else ""
             prompt_text = (
                 f"You are a world-class prompt engineer for Google Gemini multimodal image generation models (including gemini-3.1-pro-image).\n"
@@ -81,15 +76,8 @@ class GeminiImageService:
                 suggested_styles=data.get("suggested_styles", ["Photorealistic", "Cinematic", "Minimalist"])
             )
         except Exception as e:
-            logger.warning(f"Failed to enhance prompt with Gemini: {e}. Using fallback.")
-            prefix = STYLE_PROMPT_PREFIXES.get(req.style_preset or "none", "")
-            enhanced = f"{prefix}{req.prompt}, ultra-detailed, 8k resolution, award-winning composition."
-            return EnhancePromptResponse(
-                original_prompt=req.prompt,
-                enhanced_prompt=enhanced,
-                keywords=["high quality", "detailed", "aesthetic"],
-                suggested_styles=["Photorealistic", "Cinematic", "Studio"]
-            )
+            logger.exception(f"Failed to enhance prompt with Gemini: {e}")
+            raise RuntimeError(f"Prompt enhancement failed: {e}") from e
 
     def _extract_images_from_content_response(
         self,
@@ -108,11 +96,19 @@ class GeminiImageService:
             for part in content.parts:
                 inline_data = getattr(part, "inline_data", None)
                 if inline_data and getattr(inline_data, "data", None):
-                    img_bytes = inline_data.data
-                    if isinstance(img_bytes, str):
-                        img_bytes = base64.b64decode(img_bytes)
-
+                    img_data = inline_data.data
                     mime = getattr(inline_data, "mime_type", None) or "image/png"
+                    if isinstance(img_data, str):
+                        img_bytes, detected_mime = clean_base64_string(img_data)
+                        if detected_mime:
+                            mime = detected_mime
+                    elif isinstance(img_data, bytes) and img_data.startswith(b"data:"):
+                        img_bytes, detected_mime = clean_base64_string(img_data.decode("utf-8", errors="ignore"))
+                        if detected_mime:
+                            mime = detected_mime
+                    else:
+                        img_bytes = img_data
+
                     img_id, file_url = save_image_bytes(img_bytes, prefix=prefix, ext="png")
                     b64 = bytes_to_base64(img_bytes, mime)
 
@@ -151,14 +147,18 @@ class GeminiImageService:
         enhanced_text = None
         if req.enhance_prompt and req.style_preset == "none":
             try:
-                enh_res = self.enhance_prompt(EnhancePromptRequest(prompt=req.prompt, api_key=req.api_key))
+                enh_res = self.enhance_prompt(EnhancePromptRequest(
+                    prompt=req.prompt,
+                    api_key=req.api_key,
+                    base_url=getattr(req, "base_url", None)
+                ))
                 final_prompt = enh_res.enhanced_prompt
                 enhanced_text = enh_res.enhanced_prompt
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Enhance prompt failed ({e}), proceeding with original prompt")
 
         try:
-            client = self._get_client(req.api_key)
+            client = self._get_client(req.api_key, getattr(req, "base_url", None))
 
             # Legacy Imagen support if explicitly requested
             if model_name.startswith("imagen-"):
@@ -212,7 +212,13 @@ class GeminiImageService:
                 elif pg == "DONT_ALLOW":
                     image_config_args["person_generation"] = "ALLOW_NONE"
 
-            image_config = types.ImageConfig(**image_config_args)
+            # Safely create image_config only if supported by the installed google-genai version
+            image_config = None
+            if hasattr(types, "ImageConfig"):
+                try:
+                    image_config = types.ImageConfig(**image_config_args)
+                except Exception:
+                    image_config = None
 
             prompt_content = final_prompt
             if req.negative_prompt:
@@ -224,25 +230,33 @@ class GeminiImageService:
             collected_texts: List[str] = []
 
             for _ in range(count):
+                config_kwargs = {"response_modalities": ["IMAGE", "TEXT"]}
+                if image_config is not None:
+                    config_kwargs["image_config"] = image_config
                 try:
                     response = client.models.generate_content(
                         model=model_name,
                         contents=prompt_content,
-                        config=types.GenerateContentConfig(
-                            response_modalities=["IMAGE", "TEXT"],
-                            image_config=image_config
-                        )
+                        config=types.GenerateContentConfig(**config_kwargs)
                     )
                 except Exception as exc:
-                    if "response_modalities" in str(exc).lower() or "modality" in str(exc).lower():
-                        response = client.models.generate_content(
-                            model=model_name,
-                            contents=prompt_content,
-                            config=types.GenerateContentConfig(
-                                response_modalities=["IMAGE"],
-                                image_config=image_config
+                    if "response_modalities" in str(exc).lower() or "modality" in str(exc).lower() or "image_config" in str(exc).lower():
+                        fallback_kwargs = {"response_modalities": ["IMAGE"]}
+                        if image_config is not None:
+                            fallback_kwargs["image_config"] = image_config
+                        try:
+                            response = client.models.generate_content(
+                                model=model_name,
+                                contents=prompt_content,
+                                config=types.GenerateContentConfig(**fallback_kwargs)
                             )
-                        )
+                        except Exception:
+                            # Try without image_config if rejected
+                            response = client.models.generate_content(
+                                model=model_name,
+                                contents=prompt_content,
+                                config=types.GenerateContentConfig(response_modalities=["IMAGE"])
+                            )
                     else:
                         raise
 
@@ -254,6 +268,36 @@ class GeminiImageService:
 
                 if len(generated_items) >= count:
                     break
+
+            if not generated_items:
+                # If multimodal generate_content did not yield images, attempt standard imagen-3.0-generate-002
+                try:
+                    logger.info("Attempting generate_images fallback with imagen-3.0-generate-002...")
+                    img_cfg = types.GenerateImagesConfig(
+                        number_of_images=req.number_of_images,
+                        aspect_ratio=req.aspect_ratio if req.aspect_ratio in ["1:1", "3:4", "4:3", "9:16", "16:9"] else "1:1"
+                    )
+                    img_resp = client.models.generate_images(
+                        model="imagen-3.0-generate-002",
+                        prompt=final_prompt,
+                        config=img_cfg
+                    )
+                    for img in getattr(img_resp, "generated_images", []):
+                        img_bytes = img.image.image_bytes
+                        mime = img.image.mime_type or "image/png"
+                        img_id, file_url = save_image_bytes(img_bytes, prefix="imagen", ext="png")
+                        b64 = bytes_to_base64(img_bytes, mime)
+                        generated_items.append(GeneratedImageItem(
+                            id=img_id,
+                            url=file_url,
+                            image_base64=b64,
+                            enhanced_prompt=enhanced_text or final_prompt,
+                            mime_type=mime,
+                            width=1024,
+                            height=1024
+                        ))
+                except Exception as img_err:
+                    logger.warning(f"generate_images fallback also failed: {img_err}")
 
             if not generated_items:
                 err_msg = " ".join(collected_texts) if collected_texts else "No image candidate returned by Gemini model"
@@ -268,23 +312,7 @@ class GeminiImageService:
 
         except Exception as e:
             logger.exception(f"Gemini image generation error: {e}")
-            demo_pil = generate_demo_canvas(req.prompt, 1024, 1024, req.style_preset or "demo")
-            img_id, file_url = save_pil_image(demo_pil, prefix="demo_gen")
-            b64 = pil_to_base64(demo_pil)
-            return GenerateImageResponse(
-                images=[GeneratedImageItem(
-                    id=img_id,
-                    url=file_url,
-                    image_base64=b64,
-                    enhanced_prompt=f"[Demo Preview - {e}] {final_prompt}",
-                    mime_type="image/png",
-                    width=1024,
-                    height=1024
-                )],
-                prompt=req.prompt,
-                enhanced_prompt=f"Demo fallback due to: {str(e)}",
-                model_used=f"{model_name} (Demo Fallback)"
-            )
+            raise RuntimeError(f"Image generation failed: {e}") from e
 
     def edit_image(self, req: EditImageRequest) -> EditImageResponse:
         """
@@ -302,7 +330,7 @@ class GeminiImageService:
         orig_id, orig_url = save_image_bytes(src_bytes, prefix="orig_edit", ext="png")
 
         try:
-            client = self._get_client(req.api_key)
+            client = self._get_client(req.api_key, getattr(req, "base_url", None))
 
             # Legacy Imagen edit_image pathway if explicitly specified
             if model_name.startswith("imagen-"):
@@ -448,28 +476,39 @@ class GeminiImageService:
 
             # Image Config
             image_config = None
-            if req.aspect_ratio in ["1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"]:
-                image_config = types.ImageConfig(aspect_ratio=req.aspect_ratio)
+            if hasattr(types, "ImageConfig") and req.aspect_ratio in ["1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"]:
+                try:
+                    image_config = types.ImageConfig(aspect_ratio=req.aspect_ratio)
+                except Exception:
+                    image_config = None
+
+            edit_config_kwargs = {"response_modalities": ["IMAGE", "TEXT"]}
+            if image_config is not None:
+                edit_config_kwargs["image_config"] = image_config
 
             try:
                 response = client.models.generate_content(
                     model=model_name,
                     contents=contents,
-                    config=types.GenerateContentConfig(
-                        response_modalities=["IMAGE", "TEXT"],
-                        image_config=image_config
-                    )
+                    config=types.GenerateContentConfig(**edit_config_kwargs)
                 )
             except Exception as exc:
-                if "response_modalities" in str(exc).lower() or "modality" in str(exc).lower():
-                    response = client.models.generate_content(
-                        model=model_name,
-                        contents=contents,
-                        config=types.GenerateContentConfig(
-                            response_modalities=["IMAGE"],
-                            image_config=image_config
+                if "response_modalities" in str(exc).lower() or "modality" in str(exc).lower() or "image_config" in str(exc).lower():
+                    fallback_edit_kwargs = {"response_modalities": ["IMAGE"]}
+                    if image_config is not None:
+                        fallback_edit_kwargs["image_config"] = image_config
+                    try:
+                        response = client.models.generate_content(
+                            model=model_name,
+                            contents=contents,
+                            config=types.GenerateContentConfig(**fallback_edit_kwargs)
                         )
-                    )
+                    except Exception:
+                        response = client.models.generate_content(
+                            model=model_name,
+                            contents=contents,
+                            config=types.GenerateContentConfig(response_modalities=["IMAGE"])
+                        )
                 else:
                     raise
 
@@ -491,42 +530,12 @@ class GeminiImageService:
 
         except Exception as e:
             logger.exception(f"Gemini image edit failed: {e}")
-            orig_pil = base64_to_pil(req.image_base64)
-            w, h = orig_pil.size
-
-            from PIL import ImageEnhance
-            demo_img = orig_pil.copy()
-
-            if req.operation == "replace_background":
-                enhancer = ImageEnhance.Color(demo_img)
-                demo_img = enhancer.enhance(1.4)
-            elif req.operation == "modify_object":
-                enhancer = ImageEnhance.Contrast(demo_img)
-                demo_img = enhancer.enhance(1.2)
-
-            img_id, file_url = save_pil_image(demo_img, prefix=f"sim_{req.operation}")
-            b64 = pil_to_base64(demo_img)
-
-            return EditImageResponse(
-                images=[GeneratedImageItem(
-                    id=img_id,
-                    url=file_url,
-                    image_base64=b64,
-                    enhanced_prompt=f"[Demo preview: {e}] {req.prompt}",
-                    mime_type="image/png",
-                    width=w,
-                    height=h
-                )],
-                operation=req.operation,
-                original_image_url=orig_url,
-                message=f"Demo simulation executed (API response: {str(e)[:100]})",
-                model_used=f"{model_name} (Local Preview)"
-            )
+            raise RuntimeError(f"Image edit failed: {e}") from e
 
     def analyze_image(self, req: AnalyzeImageRequest) -> AnalyzeImageResponse:
         """Uses Gemini 2.0 Vision to identify objects, background, and editing ideas."""
         try:
-            client = self._get_client(req.api_key)
+            client = self._get_client(req.api_key, getattr(req, "base_url", None))
             src_bytes, src_mime = clean_base64_string(req.image_base64)
 
             prompt = (
@@ -566,20 +575,8 @@ class GeminiImageService:
                 ])
             )
         except Exception as e:
-            logger.warning(f"Image analysis error: {e}")
-            return AnalyzeImageResponse(
-                description="Visual scene containing foreground subject with distinct lighting and background elements.",
-                detected_objects=["Foreground subject", "Key focal object", "Contextual environment"],
-                background_type="Studio / Natural ambient setting",
-                composition_notes="Centered subject with natural contrast and depth of field",
-                edit_suggestions=[
-                    "Replace background with dramatic neon cyberpunk street or alpine sunset",
-                    "Remove unwanted objects or clutter from the frame",
-                    "Add atmospheric elements like volumetric fog or glowing particles",
-                    "Change object material to brushed titanium or emerald glass",
-                    "Overlay bold branding typography with drop shadow"
-                ]
-            )
+            logger.exception(f"Image analysis error: {e}")
+            raise RuntimeError(f"Image analysis failed: {e}") from e
 
 gemini_service = GeminiImageService()
 

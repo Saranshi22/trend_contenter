@@ -276,3 +276,27 @@ export interface AnalyzeImageResponse {
   composition_notes: string;
   edit_suggestions: string[];
 }
+
+export interface RecommendedImageItem {
+  id: string;
+  image_url: string;
+  thumbnail_url: string;
+  title: string;
+  snippet: string;
+  source_domain: string;
+  width?: number | null;
+  height?: number | null;
+  relevance_score: number;
+  aesthetic_score?: number | null;
+  context_score?: number | null;
+  overall_score: number;
+  reasoning?: string | null;
+  tags: string[];
+}
+
+export interface RecommendImagesResponse {
+  prompt: string;
+  total_candidates: number;
+  reranker_model: string;
+  recommendations: RecommendedImageItem[];
+}

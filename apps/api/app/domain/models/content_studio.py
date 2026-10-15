@@ -21,6 +21,7 @@ class GenerateImageRequest(BaseModel):
     style_preset: Optional[str] = Field("none", description="Style preset: cinematic, photorealistic, anime, 3d, cyberpunk, minimalist")
     model: Optional[str] = Field(None, description="Optional Gemini image model (e.g. gemini-3.1-pro-image)")
     api_key: Optional[str] = Field(None, description="Optional Google GenAI API key override")
+    base_url: Optional[str] = Field(None, description="Optional LLM gateway base URL override")
 
 class GenerateImageResponse(BaseModel):
     images: List[GeneratedImageItem]
@@ -43,6 +44,7 @@ class EditImageRequest(BaseModel):
     aspect_ratio: Optional[str] = Field(None)
     model: Optional[str] = Field(None, description="Optional Gemini image model (e.g. gemini-3.1-pro-image)")
     api_key: Optional[str] = Field(None, description="Optional Google GenAI API key override")
+    base_url: Optional[str] = Field(None, description="Optional LLM gateway base URL override")
 
 class EditImageResponse(BaseModel):
     images: List[GeneratedImageItem]
@@ -83,6 +85,7 @@ class EnhancePromptRequest(BaseModel):
     style_preset: Optional[str] = None
     target_operation: Optional[str] = "generation"  # generation or edit
     api_key: Optional[str] = None
+    base_url: Optional[str] = None
 
 class EnhancePromptResponse(BaseModel):
     original_prompt: str
@@ -94,6 +97,7 @@ class AnalyzeImageRequest(BaseModel):
     image_base64: str
     prompt: Optional[str] = "Analyze this image and identify all objects, subjects, background elements, lighting style, and recommend 5 creative editing ideas."
     api_key: Optional[str] = None
+    base_url: Optional[str] = None
 
 class AnalyzeImageResponse(BaseModel):
     description: str
@@ -111,8 +115,9 @@ class GenerateVideoRequest(BaseModel):
     person_generation: Optional[str] = Field("allow_adult", description="allow_adult, dont_allow, allow_all")
     negative_prompt: Optional[str] = Field(None, description="Elements to avoid in video")
     enhance_prompt: bool = Field(True, description="Automatically enhance video prompt")
-    model: Optional[str] = Field(None, description="Veo model (default: veo-2.0-generate-001)")
+    model: Optional[str] = Field(None, description="Video model (default: gemini-omni-1.1-flash or veo-2.0-generate-001)")
     api_key: Optional[str] = Field(None, description="Optional Google GenAI API key override")
+    base_url: Optional[str] = Field(None, description="Optional LLM gateway base URL override")
 
 class GenerateVideoResponse(BaseModel):
     id: str
@@ -166,6 +171,7 @@ class GenerateConceptsRequest(BaseModel):
     preferred_media_mix: Optional[str] = Field("balanced", description="'balanced' (both images and videos), 'image_only', 'video_only'")
     target_platforms: Optional[List[str]] = Field(None, description="Optional target platforms filter")
     api_key: Optional[str] = Field(None, description="Optional Google GenAI API key override")
+    base_url: Optional[str] = Field(None, description="Optional LLM gateway base URL override")
 
 class OpportunityConceptsRequest(BaseModel):
     """Options for generating concepts from a staged Trend Contenter opportunity (brief is built server-side)."""
@@ -181,6 +187,45 @@ class GenerateConceptsResponse(BaseModel):
     concepts: List[ContentConceptItem]
     model_used: str
     is_demo: bool = Field(False, description="True when sample concepts were returned because no Gemini API key is configured")
+
+
+# ==========================================
+# Image Recommendation & Multimodal Reranking
+# ==========================================
+
+class RecommendImagesRequest(BaseModel):
+    prompt: str = Field(..., description="Search query / prompt for finding relevant imagery")
+    num_results: int = Field(8, ge=2, le=20, description="Number of final recommendations")
+    search_provider: Optional[str] = Field("auto", description="google_cse, serpapi, web, or auto")
+    reranker_model: Optional[str] = Field("hybrid", description="gemini, clip, or hybrid")
+    safe_search: bool = Field(True)
+    gemini_api_key: Optional[str] = None
+    serpapi_key: Optional[str] = None
+    google_cse_key: Optional[str] = None
+    google_cse_id: Optional[str] = None
+    base_url: Optional[str] = None
+
+class RecommendedImageItem(BaseModel):
+    id: str
+    image_url: str
+    thumbnail_url: str
+    title: str
+    snippet: str
+    source_domain: str
+    width: Optional[int] = None
+    height: Optional[int] = None
+    relevance_score: float = Field(..., description="Prompt alignment score 0.0 - 1.0")
+    aesthetic_score: Optional[float] = Field(None, description="Visual quality score 0.0 - 1.0")
+    context_score: Optional[float] = Field(None, description="Trend/context score 0.0 - 1.0")
+    overall_score: float = Field(..., description="Weighted final score 0.0 - 1.0")
+    reasoning: Optional[str] = Field(None, description="Explanation for recommendation")
+    tags: List[str] = Field(default_factory=list)
+
+class RecommendImagesResponse(BaseModel):
+    prompt: str
+    total_candidates: int
+    reranker_model: str
+    recommendations: List[RecommendedImageItem]
 
 
 
