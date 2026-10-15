@@ -152,7 +152,10 @@ activemq-data/
 # Environments
 .env
 .envrc
-.venv
+.venv/
+backend/.venv/
+backend/content/*
+!backend/content/.gitkeep
 env/
 venv/
 ENV/

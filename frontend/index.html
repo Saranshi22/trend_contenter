@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trend Contenter - Gemini Image Generation, Editing & Recommendation Engine</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f7ff',
+              100: '#e0effe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              900: '#1e3a8a'
+            },
+            gemini: {
+              purple: '#8b5cf6',
+              pink: '#ec4899',
+              blue: '#38bdf8'
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased">
+  <!-- Top Navigation Bar -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-brand-600 via-gemini-purple to-gemini-pink flex items-center justify-center shadow-lg shadow-purple-500/20">
+          <i data-lucide="sparkles" class="w-6 h-6 text-white"></i>
+        </div>
+        <div>
+          <span class="text-xl font-bold bg-gradient-to-r from-blue-400 via-indigo-300 to-pink-400 bg-clip-text text-transparent">
+            Trend Contenter
+          </span>
+          <span class="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+            Gemini 3.1 & Veo 2
+          </span>
+        </div>
+      </div>
+
+      <!-- Main Navigation Tabs -->
+      <nav class="flex space-x-1 sm:space-x-2 bg-slate-950/70 p-1 rounded-xl border border-slate-800/80">
+        <button id="nav-tab-concepts" onclick="switchTab('concepts')" class="nav-tab active flex items-center space-x-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm font-medium transition-all">
+          <i data-lucide="lightbulb" class="w-4 h-4 text-amber-400"></i>
+          <span>Concept Studio</span>
+        </button>
+        <button id="nav-tab-generate" onclick="switchTab('generate')" class="nav-tab flex items-center space-x-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm font-medium transition-all">
+          <i data-lucide="wand-2" class="w-4 h-4"></i>
+          <span>Image Studio</span>
+        </button>
+        <button id="nav-tab-video" onclick="switchTab('video')" class="nav-tab flex items-center space-x-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm font-medium transition-all">
+          <i data-lucide="video" class="w-4 h-4"></i>
+          <span>Video Studio (Veo)</span>
+        </button>
+        <button id="nav-tab-editor" onclick="switchTab('editor')" class="nav-tab flex items-center space-x-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm font-medium transition-all">
+          <i data-lucide="layers" class="w-4 h-4"></i>
+          <span>Smart Editor</span>
+        </button>
+        <button id="nav-tab-recommend" onclick="switchTab('recommend')" class="nav-tab flex items-center space-x-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm font-medium transition-all">
+          <i data-lucide="search" class="w-4 h-4"></i>
+          <span>Image Recommender</span>
+        </button>
+        <button id="nav-tab-settings" onclick="switchTab('settings')" class="nav-tab flex items-center space-x-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-sm font-medium transition-all">
+          <i data-lucide="settings" class="w-4 h-4"></i>
+          <span>Settings</span>
+        </button>
+      </nav>
+
+      <!-- System Status Pill -->
+      <div class="hidden md:flex items-center space-x-3">
+        <div id="status-badge" class="flex items-center space-x-2 px-3 py-1 rounded-full bg-slate-800/80 border border-slate-700 text-xs">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="status-text" class="text-slate-300">Checking API...</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+    <!-- ============================================================== -->
+    <!-- TAB 1: AI CONCEPT STUDIO (Brief to Visual Ideas & Prompts)      -->
+    <!-- ============================================================== -->
+    <section id="view-concepts" class="tab-view space-y-6">
+      <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
+        <div class="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-800 gap-4 mb-4">
+          <div>
+            <h1 class="text-xl font-bold text-slate-100 flex items-center gap-2">
+              <i data-lucide="lightbulb" class="text-amber-400"></i> Concept & Content Idea Generator
+            </h1>
+            <p class="text-slate-400 text-sm mt-1">
+              Upload an executive opportunity dossier or content brief (<span class="text-amber-300 font-semibold">PDF or Markdown</span>). Gemini analyzes audience friction points and outputs platform-optimized concepts with ready-to-run prompts for Gemini 3.1 Pro Image and Google Veo.
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="loadSampleBrief()" id="btn-load-sample" class="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-semibold shadow transition-all">
+              <i data-lucide="file-text" class="w-4 h-4"></i>
+              <span>Load Sample Brief (CBD Ground Dossier)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Brief Input Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- File Upload Card -->
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Upload Brief (PDF or Markdown)
+              </label>
+              <span id="brief-file-badge" class="text-xs text-slate-500">Max 25MB • .pdf, .md, .txt</span>
+            </div>
+            
+            <div id="brief-dropzone" onclick="document.getElementById('brief-file-input').click()" class="border-2 border-dashed border-slate-700 hover:border-amber-500/60 bg-slate-950/60 rounded-2xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center min-h-[160px] group">
+              <input type="file" id="brief-file-input" accept=".pdf,.md,.markdown,.txt" class="hidden" onchange="handleBriefFileUpload(event)">
+              <div class="w-12 h-12 rounded-xl bg-amber-500/10 group-hover:bg-amber-500/20 text-amber-400 flex items-center justify-center mb-3 transition-all">
+                <i data-lucide="upload-cloud" class="w-6 h-6"></i>
+              </div>
+              <p class="text-sm font-medium text-slate-200">
+                Click to upload or drag & drop brief file
+              </p>
+              <p class="text-xs text-slate-500 mt-1">
+                Native multimodal Gemini ingestion supports raw PDF documents & Markdown dossiers
+              </p>
+              <div id="brief-file-chip" class="hidden mt-3 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-950/60 border border-amber-600/50 text-xs text-amber-200">
+                <i data-lucide="file-check" class="w-3.5 h-3.5"></i>
+                <span id="brief-file-name">filename.pdf</span>
+                <button type="button" onclick="clearBriefFile(event)" class="text-slate-400 hover:text-rose-400 ml-1">×</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Paste Markdown / Text Card -->
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Or Paste Brief Text / Markdown
+              </label>
+              <button type="button" onclick="clearBriefText()" class="text-xs text-slate-500 hover:text-rose-400">Clear</button>
+            </div>
+            <textarea id="brief-textarea" rows="6" class="w-full bg-slate-950/80 border border-slate-700/80 rounded-xl p-3.5 text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all resize-y" placeholder="# Executive Opportunity Dossier: Unlocking CBD Ground...&#10;&#10;Target Audience: Civic Activists&#10;Core Problem: Activists are unsure about legal implications and permits..."></textarea>
+          </div>
+        </div>
+
+        <!-- Controls Row -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-slate-800/80 mt-4">
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Media Mix Focus</label>
+            <select id="concept-media-mix" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-sm text-slate-200 focus:outline-none focus:border-amber-500">
+              <option value="both" selected>Balanced (Images & Videos)</option>
+              <option value="video">Video Focused (Veo Cinematic Reels & Shorts)</option>
+              <option value="image">Image Focused (Gemini 3.1 Carousels & Infographics)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Concepts Count</label>
+            <select id="concept-count" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-sm text-slate-200 focus:outline-none focus:border-amber-500">
+              <option value="2">2 High-Impact Concepts</option>
+              <option value="3">3 Concepts</option>
+              <option value="4" selected>4 Comprehensive Concepts</option>
+              <option value="6">6 Deep-Dive Campaign Concepts</option>
+            </select>
+          </div>
+
+          <div class="flex items-end">
+            <button id="btn-generate-concepts" onclick="executeGenerateConcepts()" class="w-full py-2.5 px-4 bg-gradient-to-r from-amber-500 via-purple-600 to-indigo-600 hover:from-amber-400 hover:via-purple-500 hover:to-indigo-500 text-white font-semibold rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2">
+              <i data-lucide="sparkles" class="w-4 h-4"></i>
+              <span>Generate Content Concepts</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Output Section: Concepts Results & Platform Breakdowns -->
+      <div id="concept-results-container" class="space-y-6 hidden">
+        <!-- Brief Overview Banner -->
+        <div class="bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-indigo-900/50 rounded-2xl p-6 shadow-xl">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-indigo-900/40">
+            <div>
+              <span class="text-xs uppercase tracking-wider font-semibold text-amber-400">Analyzed Brief</span>
+              <h2 id="concept-brief-title" class="text-xl font-bold text-white mt-0.5">Unlocking CBD Ground: Your Guide to Organizing Protests</h2>
+              <p id="concept-brief-summary" class="text-sm text-slate-300 mt-1 max-w-3xl">Strategic guide addressing permit bottlenecks and public crowd safety.</p>
+            </div>
+            <div class="flex flex-col items-start md:items-end gap-1">
+              <span class="text-xs text-slate-400">Target Audience</span>
+              <span id="concept-target-audience" class="px-3 py-1 rounded-full bg-indigo-900/70 text-indigo-200 border border-indigo-700 text-xs font-semibold">Civic Activists & Organizers</span>
+            </div>
+          </div>
+          <!-- Key Friction Points -->
+          <div class="pt-4">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-2">Key Audience Friction Points Identified</span>
+            <div id="concept-friction-points" class="flex flex-wrap gap-2">
+              <!-- Filled dynamically -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Concepts Grid -->
+        <div class="flex items-center justify-between">
+          <h3 class="text-lg font-bold text-white flex items-center gap-2">
+            <i data-lucide="layout-grid" class="text-amber-400 w-5 h-5"></i>
+            <span>Platform-Optimized Content Concepts</span>
+          </h3>
+          <span id="concept-model-badge" class="text-xs px-2.5 py-1 bg-slate-800 text-slate-400 rounded-md border border-slate-700"></span>
+        </div>
+
+        <div id="concepts-grid" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <!-- Cards rendered here dynamically -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- TAB 2: AI CONTENT GENERATOR (Gemini 3.1 Pro Image Synthesis)   -->
+    <!-- ============================================================== -->
+    <section id="view-generate" class="tab-view space-y-6 hidden">
+      <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+          <div>
+            <h1 class="text-2xl font-bold text-white flex items-center gap-2">
+              <i data-lucide="image-plus" class="text-blue-400"></i> AI Image Generator
+            </h1>
+            <p class="text-slate-400 text-sm mt-1">
+              Powered by <span class="text-indigo-300 font-semibold">Google Gemini (gemini-3.1-pro-image)</span> with native multimodal image synthesis & precision prompt adherence.
+            </p>
+          </div>
+          <button onclick="enhanceGeneratePrompt()" id="btn-enhance-prompt" class="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-sm font-medium shadow-md shadow-purple-600/20 transition-all">
+            <i data-lucide="sparkles" class="w-4 h-4"></i>
+            <span>Gemini Prompt Enhancer</span>
+          </button>
+        </div>
+
+        <div class="space-y-4">
+          <!-- Prompt Textarea -->
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Prompt Description</label>
+            <textarea id="gen-prompt" rows="3" class="w-full bg-slate-950/80 border border-slate-700/80 rounded-xl p-3.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all" placeholder="E.g., Cinematic street photography of a cozy Tokyo coffee shop in the rain, warm golden interior glow reflecting on wet pavement, 35mm lens, 8k resolution..."></textarea>
+          </div>
+
+          <!-- Style Presets Chips -->
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Visual Style Preset</label>
+            <div class="flex flex-wrap gap-2" id="style-presets-container">
+              <button type="button" class="style-chip active" data-style="photorealistic">Photorealistic</button>
+              <button type="button" class="style-chip" data-style="cinematic">Cinematic</button>
+              <button type="button" class="style-chip" data-style="anime">Modern Anime</button>
+              <button type="button" class="style-chip" data-style="3d">3D Render</button>
+              <button type="button" class="style-chip" data-style="cyberpunk">Cyberpunk Neon</button>
+              <button type="button" class="style-chip" data-style="minimalist">Minimalist</button>
+              <button type="button" class="style-chip" data-style="none">Raw Prompt</button>
+            </div>
+          </div>
+
+          <!-- Generation Controls Row -->
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-2">
+            <!-- Gemini Model -->
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Gemini Model</label>
+              <select id="gen-model" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-sm text-slate-200 focus:outline-none focus:border-blue-500">
+                <option value="gemini-3.1-pro-image" selected>gemini-3.1-pro-image (Default)</option>
+                <option value="gemini-2.5-flash-image">gemini-2.5-flash-image</option>
+                <option value="gemini-2.0-flash-exp">gemini-2.0-flash-exp</option>
+              </select>
+            </div>
+
+            <!-- Aspect Ratio -->
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Aspect Ratio</label>
+              <select id="gen-aspect-ratio" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-sm text-slate-200 focus:outline-none focus:border-blue-500">
+                <option value="1:1" selected>1:1 (Square)</option>
+                <option value="16:9">16:9 (Landscape - Banner / YouTube)</option>
+                <option value="9:16">9:16 (Portrait - TikTok / Story / Reel)</option>
+                <option value="4:3">4:3 (Classic Landscape)</option>
+                <option value="3:4">3:4 (Standard Portrait)</option>
+                <option value="21:9">21:9 (Ultrawide Cinematic)</option>
+              </select>
+            </div>
+
+            <!-- Number of Images -->
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Image Count</label>
+              <select id="gen-count" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-sm text-slate-200 focus:outline-none focus:border-blue-500">
+                <option value="1" selected>1 Image</option>
+                <option value="2">2 Variations</option>
+                <option value="4">4 Variations</option>
+              </select>
+            </div>
+
+            <!-- Negative Prompt Toggle -->
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Negative Prompt</label>
+              <input type="text" id="gen-negative-prompt" placeholder="blurry, distorted, watermark, low quality..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-sm text-slate-200 focus:outline-none focus:border-blue-500">
+            </div>
+          </div>
+
+          <!-- Generate Action Button -->
+          <div class="pt-2 flex justify-end">
+            <button onclick="executeGenerate()" id="btn-generate" class="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-semibold rounded-xl shadow-lg shadow-blue-500/25 flex items-center justify-center space-x-2 transition-all transform active:scale-95">
+              <i data-lucide="sparkles" class="w-5 h-5"></i>
+              <span>Generate Content</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Generated Images Output Section -->
+      <div id="gen-results-section" class="space-y-4 hidden">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-bold text-slate-200 flex items-center gap-2">
+            <i data-lucide="check-circle-2" class="text-emerald-400"></i> Generation Results
+          </h2>
+          <span id="gen-model-badge" class="text-xs px-2.5 py-1 bg-slate-800 text-indigo-300 rounded-md border border-slate-700"></span>
+        </div>
+
+        <div id="gen-results-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- TAB: AI VIDEO STUDIO (Google Veo Video Generation)             -->
+    <!-- ============================================================== -->
+    <section id="view-video" class="tab-view space-y-6 hidden">
+      <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
+        <div class="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-800 gap-4 mb-4">
+          <div>
+            <h1 class="text-xl font-bold text-slate-100 flex items-center gap-2">
+              <i data-lucide="video" class="text-pink-400"></i> AI Video Studio
+            </h1>
+            <p class="text-slate-400 text-sm mt-1">
+              Powered by <span class="text-pink-300 font-semibold">Google Veo (veo-2.0-generate-001)</span> for cinematic text-to-video & image-to-video generation.
+            </p>
+          </div>
+          <button onclick="enhanceVideoPrompt()" id="btn-enhance-video-prompt" class="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white rounded-xl text-sm font-medium shadow-md shadow-pink-600/20 transition-all">
+            <i data-lucide="sparkles" class="w-4 h-4"></i>
+            <span>Veo Cinematography Enhancer</span>
+          </button>
+        </div>
+
+        <div class="space-y-4">
+          <!-- Video Prompt -->
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Cinematic Scene & Motion Prompt</label>
+            <textarea id="video-prompt" rows="3" class="w-full bg-slate-950/80 border border-slate-700/80 rounded-xl p-3.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-pink-500/50 focus:border-pink-500 transition-all" placeholder="E.g., Cinematic slow-motion drone shot flying through a neon-lit futuristic cyberpunk alley with rain reflections, volumetric steam rising, 4k ultra-detailed, 24fps..."></textarea>
+          </div>
+
+          <!-- Camera Movement Quick Tags -->
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Cinematic Camera & Motion Presets</label>
+            <div class="flex flex-wrap gap-2" id="video-presets-container">
+              <button type="button" onclick="appendVideoPreset('FPV drone swoop and low pass')" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 rounded-lg border border-slate-700 transition-all">+ FPV Drone Swoop</button>
+              <button type="button" onclick="appendVideoPreset('Slow cinematic push-in tracking shot')" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 rounded-lg border border-slate-700 transition-all">+ Slow Push-In</button>
+              <button type="button" onclick="appendVideoPreset('Dramatic 360-degree orbit around subject')" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 rounded-lg border border-slate-700 transition-all">+ 360° Orbit</button>
+              <button type="button" onclick="appendVideoPreset('Atmospheric time-lapse sunset with shifting clouds')" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 rounded-lg border border-slate-700 transition-all">+ Time-Lapse</button>
+              <button type="button" onclick="appendVideoPreset('Super slow-motion 120fps fluid movement')" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 rounded-lg border border-slate-700 transition-all">+ 120fps Slow-Mo</button>
+            </div>
+          </div>
+
+          <!-- Optional Input Image for Image-to-Video -->
+          <div class="p-4 bg-slate-950/50 border border-slate-800 rounded-xl space-y-3">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                <i data-lucide="image" class="w-3.5 h-3.5 text-indigo-400"></i>
+                Optional: Initial Image (Image-to-Video)
+              </label>
+              <button type="button" id="btn-clear-video-img" onclick="clearVideoInputImage()" class="text-xs text-slate-500 hover:text-rose-400 hidden">Remove Image</button>
+            </div>
+            <div class="flex items-center gap-4">
+              <div id="video-img-preview-box" class="w-20 h-20 rounded-lg bg-slate-900 border border-slate-700 overflow-hidden flex items-center justify-center text-slate-600">
+                <i data-lucide="image" class="w-6 h-6"></i>
+              </div>
+              <div class="flex-1 space-y-1">
+                <input type="file" id="video-file-input" accept="image/*" class="hidden" onchange="handleVideoImageUpload(event)">
+                <button type="button" onclick="document.getElementById('video-file-input').click()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 rounded-lg flex items-center gap-1.5 transition-all">
+                  <i data-lucide="upload" class="w-3.5 h-3.5 text-pink-400"></i>
+                  <span>Upload Image to Animate</span>
+                </button>
+                <p class="text-xs text-slate-500">Veo will bring this image to life with realistic motion and camera dynamics.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Video Generation Controls Row -->
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 pt-2">
+            <!-- Veo Model -->
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Veo Model</label>
+              <select id="video-model" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-sm text-slate-200 focus:outline-none focus:border-pink-500">
+                <option value="veo-2.0-generate-001" selected>veo-2.0-generate-001 (Veo 2)</option>
+              </select>
+            </div>
+
+            <!-- Aspect Ratio -->
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Aspect Ratio</label>
+              <select id="video-aspect-ratio" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-sm text-slate-200 focus:outline-none focus:border-pink-500">
+                <option value="16:9" selected>16:9 (Landscape - YouTube / Film)</option>
+                <option value="9:16">9:16 (Portrait - TikTok / Reels)</option>
+                <option value="1:1">1:1 (Square)</option>
+              </select>
+            </div>
+
+            <!-- Duration & FPS -->
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Duration & FPS</label>
+              <select id="video-duration" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-sm text-slate-200 focus:outline-none focus:border-pink-500">
+                <option value="5" selected>5 Seconds (24 fps)</option>
+                <option value="6">6 Seconds (24 fps)</option>
+                <option value="8">8 Seconds (30 fps)</option>
+              </select>
+            </div>
+
+            <!-- Negative Prompt -->
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Negative Prompt</label>
+              <input type="text" id="video-negative-prompt" placeholder="shaky, low quality, jittery, blur..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-sm text-slate-200 focus:outline-none focus:border-pink-500">
+            </div>
+          </div>
+
+          <!-- Video Action Button -->
+          <div class="pt-2 flex justify-end">
+            <button onclick="executeGenerateVideo()" id="btn-generate-video" class="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-pink-600 via-rose-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-semibold rounded-xl shadow-lg shadow-pink-500/25 flex items-center justify-center space-x-2 transition-all transform active:scale-95">
+              <i data-lucide="clapperboard" class="w-5 h-5"></i>
+              <span>Generate Video with Veo</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Generated Video Results Section -->
+      <div id="video-results-section" class="space-y-4 hidden">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-bold text-slate-200 flex items-center gap-2">
+            <i data-lucide="check-circle-2" class="text-emerald-400"></i> Generated Veo Video
+          </h2>
+          <span id="video-model-badge" class="text-xs px-2.5 py-1 bg-slate-800 text-pink-300 rounded-md border border-slate-700"></span>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl p-6 space-y-4">
+          <div class="relative bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center max-w-4xl mx-auto">
+            <video id="video-player" controls playsinline class="w-full h-full object-contain max-h-[500px]">
+              <source id="video-source" src="" type="video/mp4">
+              Your browser does not support the video tag.
+            </video>
+          </div>
+
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 border-t border-slate-800">
+            <div class="space-y-1">
+              <p id="video-prompt-display" class="text-xs text-slate-300 font-medium"></p>
+              <p id="video-meta-display" class="text-[11px] text-slate-500"></p>
+            </div>
+            <div class="flex items-center gap-2">
+              <a id="video-download-btn" href="#" download="veo_video.mp4" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-lg flex items-center gap-1.5 transition-all">
+                <i data-lucide="download" class="w-4 h-4"></i>
+                <span>Download MP4</span>
+              </a>
+              <button onclick="captureVideoFrameToEditor()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium rounded-lg flex items-center gap-1.5 transition-all" title="Extract current frame to Smart Editor">
+                <i data-lucide="layers" class="w-4 h-4"></i>
+                <span>Send Frame to Editor</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- TAB 2: SMART IMAGE EDITOR (Gemini 3.1 Pro Image Multimodal Editing) -->
+    <!-- ============================================================== -->
+    <section id="view-editor" class="tab-view space-y-6 hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left Controls Column (4 cols) -->
+        <div class="lg:col-span-4 space-y-4">
+          <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-xl backdrop-blur-sm space-y-4">
+            <div>
+              <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                <i data-lucide="sliders" class="text-indigo-400"></i> Edit Operations
+              </h2>
+              <p class="text-slate-400 text-xs mt-1">Select an AI manipulation action</p>
+            </div>
+
+            <!-- Operation Selector Radio/Tabs -->
+            <div class="space-y-2">
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400">Mode</label>
+              <div class="grid grid-cols-1 gap-1.5" id="editor-mode-selector">
+                <button type="button" onclick="setEditorMode('replace_background')" class="edit-mode-btn active flex items-center gap-2 p-2.5 rounded-xl border text-sm text-left transition-all" data-mode="replace_background">
+                  <i data-lucide="image" class="w-4 h-4 text-emerald-400"></i>
+                  <div>
+                    <div class="font-medium text-slate-200">Replace Background</div>
+                    <div class="text-xs text-slate-400">Swap backdrop while preserving subject</div>
+                  </div>
+                </button>
+                <button type="button" onclick="setEditorMode('remove_object')" class="edit-mode-btn flex items-center gap-2 p-2.5 rounded-xl border text-sm text-left transition-all" data-mode="remove_object">
+                  <i data-lucide="eraser" class="w-4 h-4 text-rose-400"></i>
+                  <div>
+                    <div class="font-medium text-slate-200">Remove Object</div>
+                    <div class="text-xs text-slate-400">Erase unwanted items & blend background</div>
+                  </div>
+                </button>
+                <button type="button" onclick="setEditorMode('add_object')" class="edit-mode-btn flex items-center gap-2 p-2.5 rounded-xl border text-sm text-left transition-all" data-mode="add_object">
+                  <i data-lucide="plus-circle" class="w-4 h-4 text-amber-400"></i>
+                  <div>
+                    <div class="font-medium text-slate-200">Add Object</div>
+                    <div class="text-xs text-slate-400">Insert new elements with matching lighting</div>
+                  </div>
+                </button>
+                <button type="button" onclick="setEditorMode('modify_object')" class="edit-mode-btn flex items-center gap-2 p-2.5 rounded-xl border text-sm text-left transition-all" data-mode="modify_object">
+                  <i data-lucide="palette" class="w-4 h-4 text-purple-400"></i>
+                  <div>
+                    <div class="font-medium text-slate-200">Modify Object / Style</div>
+                    <div class="text-xs text-slate-400">Change attire, colors, textures, lighting</div>
+                  </div>
+                </button>
+                <button type="button" onclick="setEditorMode('add_text')" class="edit-mode-btn flex items-center gap-2 p-2.5 rounded-xl border text-sm text-left transition-all" data-mode="add_text">
+                  <i data-lucide="type" class="w-4 h-4 text-blue-400"></i>
+                  <div>
+                    <div class="font-medium text-slate-200">Add Typography / Text</div>
+                    <div class="text-xs text-slate-400">Precision styling, shadow, badge & layout</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <!-- Dynamic Parameter Inputs based on Mode -->
+            <div id="editor-dynamic-inputs" class="space-y-3 pt-2 border-t border-slate-800">
+              <!-- Gemini Model for Editing -->
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                  Gemini Editing Model
+                </label>
+                <select id="editor-model" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                  <option value="gemini-3.1-pro-image" selected>gemini-3.1-pro-image (Default)</option>
+                  <option value="gemini-2.5-flash-image">gemini-2.5-flash-image</option>
+                  <option value="gemini-2.0-flash-exp">gemini-2.0-flash-exp</option>
+                </select>
+              </div>
+
+              <!-- AI Edit Prompt (for background, object removal, addition, modification) -->
+              <div id="field-prompt-container">
+                <label id="editor-prompt-label" class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                  New Background Description
+                </label>
+                <textarea id="editor-prompt" rows="3" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500" placeholder="E.g., Luxurious penthouse balcony overlooking a sun-drenched coastal bay..."></textarea>
+              </div>
+
+              <!-- Specific Object Field (for removal/addition) -->
+              <div id="field-target-container" class="hidden">
+                <label id="editor-target-label" class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Target Object</label>
+                <input type="text" id="editor-target-object" placeholder="E.g., coffee cup, power lines, person in background..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-sm text-slate-200 focus:outline-none focus:border-indigo-500">
+              </div>
+
+              <!-- Typography Studio Controls (when add_text is selected) -->
+              <div id="field-typography-container" class="space-y-3 hidden">
+                <div>
+                  <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Text String</label>
+                  <textarea id="typo-text" rows="2" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-sm text-slate-100 focus:outline-none focus:border-blue-500" placeholder="TREND VIBES 2026"></textarea>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Font Family</label>
+                    <select id="typo-font" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-slate-200">
+                      <option value="sans-serif">Modern Sans-Serif</option>
+                      <option value="serif">Editorial Serif</option>
+                      <option value="impact">Impact / Bold</option>
+                      <option value="monospace">Tech Monospace</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Font Size: <span id="typo-size-val">52px</span></label>
+                    <input type="range" id="typo-size" min="16" max="150" value="52" class="w-full accent-blue-500" oninput="document.getElementById('typo-size-val').innerText = this.value + 'px'">
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Text Color</label>
+                    <input type="color" id="typo-color" value="#FFFFFF" class="w-full h-8 bg-slate-950 border border-slate-700 rounded-lg cursor-pointer">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Position</label>
+                    <select id="typo-position" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-slate-200">
+                      <option value="bottom-center" selected>Bottom Center</option>
+                      <option value="top-center">Top Center (Header)</option>
+                      <option value="center">Dead Center</option>
+                      <option value="bottom-left">Bottom Left</option>
+                      <option value="bottom-right">Bottom Right</option>
+                      <option value="top-left">Top Left</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-1">
+                  <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                    <input type="checkbox" id="typo-shadow" checked class="rounded border-slate-700 text-blue-600 focus:ring-0">
+                    <span>Drop Shadow</span>
+                  </label>
+                  <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                    <input type="checkbox" id="typo-badge" class="rounded border-slate-700 text-blue-600 focus:ring-0">
+                    <span>Badge Pill Box</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Execute Button -->
+            <button onclick="executeEdit()" id="btn-execute-edit" class="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/20 flex items-center justify-center space-x-2 transition-all">
+              <i data-lucide="wand" class="w-5 h-5"></i>
+              <span id="btn-edit-text">Execute Background Replacement</span>
+            </button>
+
+            <!-- Gemini Image Analyzer -->
+            <button onclick="analyzeCurrentImage()" class="w-full py-2 bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-slate-300 text-xs font-medium rounded-xl flex items-center justify-center gap-2 transition-all">
+              <i data-lucide="scan-search" class="w-4 h-4 text-purple-400"></i>
+              <span>Gemini Vision Scene Analysis & Edit Ideas</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Right Canvas & Preview Column (8 cols) -->
+        <div class="lg:col-span-8 space-y-4">
+          <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 shadow-xl backdrop-blur-sm">
+
+            <!-- Canvas Top Toolbar -->
+            <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+              <div class="flex items-center space-x-2">
+                <span class="text-sm font-semibold text-slate-200">Interactive Canvas</span>
+                <span id="canvas-info" class="text-xs text-slate-500">Ready</span>
+              </div>
+
+              <div class="flex items-center space-x-2">
+                <!-- Upload button -->
+                <label class="cursor-pointer px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-medium text-slate-200 flex items-center gap-1.5 transition-all">
+                  <i data-lucide="upload" class="w-3.5 h-3.5 text-blue-400"></i>
+                  <span>Upload Image</span>
+                  <input type="file" id="editor-file-input" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
+                </label>
+
+                <!-- Load sample template -->
+                <button onclick="loadSampleToEditor()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-medium text-slate-200 flex items-center gap-1.5 transition-all">
+                  <i data-lucide="file-image" class="w-3.5 h-3.5 text-emerald-400"></i>
+                  <span>Load Sample</span>
+                </button>
+
+                <!-- Brush controls toggle (for mask drawing) -->
+                <button id="btn-toggle-mask" onclick="toggleBrushMode()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs font-medium text-slate-200 flex items-center gap-1.5 transition-all">
+                  <i data-lucide="brush" class="w-3.5 h-3.5 text-purple-400"></i>
+                  <span id="brush-toggle-label">Mask Brush: OFF</span>
+                </button>
+
+                <!-- Clear mask -->
+                <button onclick="clearMask()" class="px-2.5 py-1.5 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 rounded-lg text-xs text-slate-400 hover:text-slate-200 transition-all" title="Clear Mask">
+                  <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Brush Size Slider Bar (when brush is active) -->
+            <div id="brush-size-bar" class="hidden py-2 px-3 my-2 bg-slate-950/80 rounded-xl border border-slate-800 flex items-center gap-4 text-xs">
+              <span class="text-slate-400 flex items-center gap-1"><i data-lucide="brush" class="w-3.5 h-3.5"></i> Brush Size:</span>
+              <input type="range" id="brush-size" min="5" max="80" value="25" class="w-48 accent-purple-500" oninput="document.getElementById('brush-val').innerText = this.value + 'px'">
+              <span id="brush-val" class="text-slate-300 font-mono">25px</span>
+              <span class="text-slate-500 text-xs ml-auto">Draw over object to mask for inpainting</span>
+            </div>
+
+            <!-- Canvas Viewport -->
+            <div class="relative mt-3 min-h-[420px] bg-slate-950 rounded-xl overflow-hidden border border-slate-800 flex items-center justify-center">
+              <div id="editor-empty-state" class="text-center p-8 space-y-3">
+                <div class="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center mx-auto text-slate-500">
+                  <i data-lucide="image" class="w-8 h-8"></i>
+                </div>
+                <div class="text-slate-300 font-medium">No Image Loaded</div>
+                <p class="text-slate-500 text-xs max-w-sm">Upload an image, load a sample, or transfer an image from Generator or Recommender tabs.</p>
+                <div class="pt-2 flex justify-center gap-2">
+                  <button onclick="document.getElementById('editor-file-input').click()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow">Upload Image</button>
+                  <button onclick="loadSampleToEditor()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700">Load Sample</button>
+                </div>
+              </div>
+
+              <!-- Main Canvas Layer Container -->
+              <div id="canvas-container" class="relative hidden max-w-full max-h-[600px] overflow-hidden">
+                <canvas id="base-canvas" class="max-w-full max-h-[560px] object-contain rounded-lg shadow-2xl block"></canvas>
+                <canvas id="mask-canvas" class="absolute top-0 left-0 max-w-full max-h-[560px] pointer-events-none cursor-crosshair rounded-lg"></canvas>
+              </div>
+            </div>
+
+            <!-- Side-by-Side Comparison Container (if edited) -->
+            <div id="comparison-section" class="mt-4 pt-4 border-t border-slate-800 hidden space-y-3">
+              <div class="flex items-center justify-between">
+                <h3 class="text-sm font-bold text-slate-200 flex items-center gap-1.5">
+                  <i data-lucide="split" class="text-indigo-400"></i> Before & After Comparison
+                </h3>
+                <div class="flex gap-2">
+                  <button onclick="adoptEditedImage()" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white text-xs rounded-lg font-medium transition-all">Keep as Base for Next Edit</button>
+                  <button onclick="downloadEditedResult()" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs rounded-lg font-medium transition-all flex items-center gap-1">
+                    <i data-lucide="download" class="w-3 h-3"></i> Download Result
+                  </button>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-slate-950 p-2 rounded-xl border border-slate-800 text-center">
+                  <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider block mb-2">Original (Before)</span>
+                  <img id="comp-original" src="" alt="Original" class="w-full h-64 object-contain rounded-lg bg-black/40">
+                </div>
+                <div class="bg-slate-950 p-2 rounded-xl border border-slate-800 text-center">
+                  <span class="text-xs font-semibold text-indigo-400 uppercase tracking-wider block mb-2">Edited (After)</span>
+                  <img id="comp-edited" src="" alt="Edited Result" class="w-full h-64 object-contain rounded-lg bg-black/40">
+                </div>
+              </div>
+            </div>
+
+            <!-- Gemini Analysis Card Modal/Banner -->
+            <div id="gemini-analysis-card" class="mt-4 p-4 rounded-xl bg-slate-950/90 border border-purple-500/30 hidden space-y-2">
+              <div class="flex items-center justify-between">
+                <div class="text-xs font-bold text-purple-300 flex items-center gap-1.5 uppercase tracking-wider">
+                  <i data-lucide="sparkles" class="w-4 h-4"></i> Gemini Multimodal Vision Intelligence
+                </div>
+                <button onclick="document.getElementById('gemini-analysis-card').classList.add('hidden')" class="text-slate-500 hover:text-slate-300 text-xs">✕ Close</button>
+              </div>
+              <p id="analysis-desc" class="text-xs text-slate-300"></p>
+              <div class="text-xs text-slate-400 font-semibold pt-1">Suggested Next Edits:</div>
+              <ul id="analysis-suggestions" class="list-disc list-inside text-xs text-slate-300 space-y-1"></ul>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- TAB 3: IMAGE RECOMMENDATION ENGINE (Google Images + Reranker)  -->
+    <!-- ============================================================== -->
+    <section id="view-recommend" class="tab-view space-y-6 hidden">
+      <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-xl backdrop-blur-sm">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+          <div>
+            <h1 class="text-2xl font-bold text-white flex items-center gap-2">
+              <i data-lucide="sparkle" class="text-indigo-400"></i> Image Recommendation Engine
+            </h1>
+            <p class="text-slate-400 text-sm mt-1">
+              Searches live imagery via <span class="text-blue-300 font-semibold">Google Search Image API</span> and re-ranks candidates with a <span class="text-purple-300 font-semibold">Multimodal Reranker Model (CLIP / Gemini)</span> for ultra-accurate trend recommendations.
+            </p>
+          </div>
+        </div>
+
+        <div class="space-y-4">
+          <!-- Search Prompt -->
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Recommendation Prompt / Search Intent</label>
+            <div class="relative">
+              <input type="text" id="rec-prompt" class="w-full bg-slate-950/80 border border-slate-700 rounded-xl py-3.5 pl-4 pr-12 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 text-sm" placeholder="E.g., Sustainable modern bamboo architecture in lush tropical forest, minimalist aesthetic...">
+              <button onclick="executeRecommendation()" class="absolute right-2 top-2 bottom-2 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg flex items-center justify-center transition-all">
+                <i data-lucide="search" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Configuration Row -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+            <!-- Search Provider -->
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Search Provider</label>
+              <select id="rec-provider" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                <option value="auto" selected>Auto (Google CSE / SerpApi / Web)</option>
+                <option value="google_cse">Google Custom Search (CSE API)</option>
+                <option value="serpapi">SerpApi (Google Images Engine)</option>
+                <option value="web">Direct Web Images Fallback</option>
+              </select>
+            </div>
+
+            <!-- Reranker Model -->
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Reranker Model</label>
+              <select id="rec-reranker" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                <option value="hybrid" selected>Hybrid Ensemble (CLIP Sim + Gemini Reasoning)</option>
+                <option value="gemini">Gemini 2.0 Multimodal Evaluator (Deep Quality)</option>
+                <option value="clip">CLIP Vision-Text Cross-Encoder (PyTorch MPS)</option>
+              </select>
+            </div>
+
+            <!-- Result Limit -->
+            <div>
+              <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Top Recommendations</label>
+              <select id="rec-count" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+                <option value="6">Top 6 Ranked</option>
+                <option value="9" selected>Top 9 Ranked</option>
+                <option value="12">Top 12 Ranked</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Quick Trend Inspirations -->
+          <div class="pt-1">
+            <span class="text-xs text-slate-400 mr-2 font-medium">Quick Prompts:</span>
+            <div class="inline-flex flex-wrap gap-1.5 mt-1">
+              <button onclick="setRecQuickPrompt('Minimalist matte black coffee workspace with warm morning sunlight')" class="text-xs px-2.5 py-1 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700/60 transition-all">Workspace Aesthetic</button>
+              <button onclick="setRecQuickPrompt('Sleek futuristic electric hypercar in neon cyberpunk Tokyo')" class="text-xs px-2.5 py-1 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700/60 transition-all">Cyberpunk Hypercar</button>
+              <button onclick="setRecQuickPrompt('Luxury organic skincare cosmetic bottles floating on ripple water')" class="text-xs px-2.5 py-1 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700/60 transition-all">Skincare Product</button>
+              <button onclick="setRecQuickPrompt('Ethereal mountain alpine lake reflection at sunrise with morning fog')" class="text-xs px-2.5 py-1 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700/60 transition-all">Alpine Landscape</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recommendation Results Grid -->
+      <div id="rec-results-section" class="space-y-4 hidden">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <h2 class="text-lg font-bold text-slate-200 flex items-center gap-2">
+              <i data-lucide="award" class="text-yellow-400"></i> Ranked Recommendations
+            </h2>
+            <span id="rec-count-badge" class="text-xs px-2.5 py-0.5 bg-slate-800 text-indigo-300 rounded-full border border-slate-700"></span>
+          </div>
+          <span id="rec-reranker-badge" class="text-xs px-2.5 py-1 bg-indigo-950/80 text-indigo-300 rounded-lg border border-indigo-800/60"></span>
+        </div>
+
+        <div id="rec-results-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <!-- Dynamically populated with Ranked Cards -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================== -->
+    <!-- TAB 4: SETTINGS & API KEYS                                     -->
+    <!-- ============================================================== -->
+    <section id="view-settings" class="tab-view space-y-6 hidden">
+      <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-xl backdrop-blur-sm max-w-3xl mx-auto space-y-6">
+        <div>
+          <h1 class="text-2xl font-bold text-white flex items-center gap-2">
+            <i data-lucide="key" class="text-indigo-400"></i> Settings & API Credentials
+          </h1>
+          <p class="text-slate-400 text-sm mt-1">
+            Configure your API keys. Keys are saved securely in your browser's local storage and passed with requests.
+          </p>
+        </div>
+
+        <div class="space-y-4">
+          <!-- Gemini API Key -->
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+              Google Gemini API Key
+            </label>
+            <input type="password" id="cfg-gemini-key" placeholder="AIzaSy..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+            <p class="text-xs text-slate-500 mt-1">
+              Required for Gemini image generation (gemini-3.1-pro-image), multimodal editing, prompt enhancement, and Gemini Vision analysis. Get free key at <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-blue-400 hover:underline">Google AI Studio</a>.
+            </p>
+          </div>
+
+          <!-- Google Custom Search Engine -->
+          <div class="pt-2 border-t border-slate-800 space-y-3">
+            <h3 class="text-sm font-semibold text-slate-300">Google Custom Search Image API (Optional)</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Google API Key</label>
+                <input type="password" id="cfg-gcse-key" placeholder="AIzaSy..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+              </div>
+              <div>
+                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Custom Search Engine ID (CX)</label>
+                <input type="text" id="cfg-gcse-id" placeholder="017576..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+              </div>
+            </div>
+          </div>
+
+          <!-- SerpApi Key -->
+          <div class="pt-2 border-t border-slate-800">
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-1">
+              SerpApi API Key (Alternative for Google Images)
+            </label>
+            <input type="password" id="cfg-serpapi-key" placeholder="serpapi_..." class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm text-slate-100 focus:outline-none focus:border-indigo-500">
+            <p class="text-xs text-slate-500 mt-1">
+              Allows querying Google Images engine with high rate limits. Get key at <a href="https://serpapi.com/" target="_blank" class="text-blue-400 hover:underline">serpapi.com</a>.
+            </p>
+          </div>
+
+          <!-- Actions -->
+          <div class="pt-4 border-t border-slate-800 flex items-center justify-between">
+            <button onclick="saveSettings()" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-semibold shadow-md transition-all">
+              Save Settings
+            </button>
+            <button onclick="testConnection()" class="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 rounded-xl text-sm font-medium transition-all">
+              Check Connection
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Global Toast Notification Container -->
+  <div id="toast-container" class="fixed bottom-6 right-6 z-50 space-y-2 pointer-events-none"></div>
+
+  <!-- Loading Modal / Backdrop -->
+  <div id="loading-overlay" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl">
+      <div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-blue-600 to-purple-600 flex items-center justify-center mx-auto animate-spin">
+        <i data-lucide="sparkles" class="w-6 h-6 text-white"></i>
+      </div>
+      <div>
+        <h3 id="loading-title" class="text-base font-bold text-white">Processing with Gemini...</h3>
+        <p id="loading-desc" class="text-xs text-slate-400 mt-1">Executing request</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
+
