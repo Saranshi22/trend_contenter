@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Literal
+from typing import Literal, Any
 from datetime import datetime
 
 class EvidenceItem(BaseModel):
@@ -11,7 +11,8 @@ class EvidenceItem(BaseModel):
         "social",
         "web",
         "news",
-        "llm"
+        "llm",
+        "video_platform"
     ]
 
     platform: str
@@ -24,7 +25,9 @@ class EvidenceItem(BaseModel):
     retrieved_at: datetime
 
     author: str | None = None
-    engagement: dict[str, float | int] = {}
+    engagement: dict[str, Any] = {}
     metadata: dict = {}
 
     content_hash: str
+    confidence: float = 0.85
+    is_inferred: bool = False

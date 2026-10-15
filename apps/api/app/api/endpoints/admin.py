@@ -10,6 +10,7 @@ from ...db_postgres import get_postgres_session
 from ...security.auth import get_current_user, require_permission
 from ...domain.models.user import User
 from ...config import settings
+from ...integrations.video import cleanup_expired_youtube_evidence
 
 router = APIRouter()
 
@@ -233,6 +234,14 @@ async def list_integrations(
             status="active" if (settings.OPENAI_API_KEY or settings.GEMINI_API_KEY) else "ready_fallback",
             masked_key=_mask(settings.OPENAI_API_KEY or settings.GEMINI_API_KEY),
             details={"models": ["gpt-4o-mini", "gemini-1.5-pro"]}
+        ),
+        IntegrationInfo(
+            integration_id="int_youtube_data_api",
+            name="YouTube Data API v3 (Official)",
+            provider_type="video_platform",
+            status="active" if settings.get_youtube_api_key() else "not_configured",
+            masked_key=_mask(settings.get_youtube_api_key()),
+            details={"engine": "youtube_v3", "region": settings.YOUTUBE_REGION_CODE, "quota_budget": 105}
         )
     ]
 
@@ -364,3 +373,20 @@ async def list_audit_logs(
         )
         for r in rows
     ]
+
+
+@router.post("/compliance/youtube-cleanup", response_model=Dict[str, Any])
+async def trigger_youtube_compliance_cleanup(
+    db: AsyncSession = Depends(get_postgres_session),
+    current_user: User = Depends(require_permission("integrations.write"))
+):
+    """
+    Manually triggers 30-day retention cleanup for YouTube Data API records
+    in compliance with official YouTube API Developer Policies.
+    """
+    purged = await cleanup_expired_youtube_evidence(db)
+    return {
+        "status": "success",
+        "purged_records": purged,
+        "policy": "YouTube API Services Terms - 30-day retention limit enforced"
+    }

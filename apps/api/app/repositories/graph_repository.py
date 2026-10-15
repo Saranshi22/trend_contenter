@@ -25,7 +25,7 @@ class PostgresGraphWriter:
         trend_id = state.get("trend_id", f"trend_{uuid.uuid4().hex[:8]}")
 
         # 1. Upsert Investigation Record
-        source_statuses = json.dumps(state.get("source_statuses") or {"social": "success", "web": "success", "llm": "success"})
+        source_statuses = json.dumps(state.get("source_statuses") or {"social": "success", "web": "success", "youtube": "success", "llm": "success"})
         research_plan = json.dumps(state.get("research_plan") or {})
         narratives_json = json.dumps(state.get("narratives") or [])
         questions_json = json.dumps(state.get("questions") or [])

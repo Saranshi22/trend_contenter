@@ -1,5 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import type { InvestigationSummary, InvestigationDetail, EvidenceDetail, Opportunity } from '../types';
+import { API_BASE } from '../apiConfig';
+import {
+  IconOverview,
+  IconBookOpen,
+  IconBot,
+  IconUsers,
+  IconLayers,
+  IconFileText,
+  IconClock,
+  IconReddit,
+  IconNews,
+  IconYouTube,
+  IconFilePdf,
+  IconArrowRight,
+  IconRefresh,
+  IconEye,
+  IconThumbsUp,
+  IconCheck,
+  IconExternalLink
+} from '../components/Icons';
 
 interface InvestigationsPageProps {
   investigations: InvestigationSummary[];
@@ -25,8 +45,6 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
   const [evidenceSearch, setEvidenceSearch] = useState('');
   const [customTopic, setCustomTopic] = useState('');
   const [retryingId, setRetryingId] = useState<string | null>(null);
-
-  const API_BASE = 'http://127.0.0.1:8001/api/v1';
 
   // Fetch full report detail when an investigation is selected
   useEffect(() => {
@@ -67,8 +85,8 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
     return (
       <div className="page-container animate-fade-in" style={{ padding: '60px 0', textAlign: 'center' }}>
         <span className="pulse-dot" style={{ width: '16px', height: '16px', marginBottom: '16px' }} />
-        <h2 style={{ fontSize: '1.4rem', color: '#fff', marginTop: '12px' }}>Loading Intelligence Dossier...</h2>
-        <p style={{ color: 'var(--text-secondary)' }}>Retrieving normalized evidence graph and research narratives.</p>
+        <h2 style={{ fontSize: '1.35rem', color: 'var(--text-primary)', marginTop: '12px' }}>Loading Intelligence Dossier...</h2>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem' }}>Retrieving normalized evidence graph and research narratives.</p>
       </div>
     );
   }
@@ -84,9 +102,10 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
           <button 
             className="btn-outline" 
             onClick={() => setSelectedInvId(null)}
-            style={{ fontSize: '0.85rem', padding: '8px 16px' }}
+            style={{ fontSize: '0.85rem', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            ← Back to Investigations List
+            <IconArrowRight size={13} style={{ transform: 'rotate(180deg)' }} />
+            <span>Back to Investigations List</span>
           </button>
           <div style={{ display: 'flex', gap: '8px' }}>
             <span className={`badge ${status === 'complete' ? 'badge-emerald' : status === 'failed' ? 'badge-amber' : 'badge-cyan'}`}>
@@ -99,30 +118,37 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
         </div>
 
         {/* Intelligence Report Header Banner */}
-        <div className="glass-card" style={{ padding: '28px', marginBottom: '24px' }}>
+        <div className="glass-card" style={{ padding: '24px', marginBottom: '24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
             <div>
-              <span className="badge badge-cyan" style={{ fontSize: '0.7rem', marginBottom: '8px', display: 'inline-block' }}>
+              <span className="badge badge-cyan" style={{ fontSize: '0.75rem', marginBottom: '8px', display: 'inline-block' }}>
                 Trend Intelligence Dossier
               </span>
-              <h1 style={{ fontSize: '2.4rem', color: '#fff', textTransform: 'capitalize', marginBottom: '8px' }}>
+              <h1 style={{ fontSize: '2rem', color: 'var(--text-primary)', textTransform: 'capitalize', marginBottom: '8px', fontWeight: 700 }}>
                 {topic}
               </h1>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', margin: 0 }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem', margin: 0 }}>
                 Synthesized by LangGraph Planner, Social Research, Web Search, and LLM Ecosystem Monitoring.
               </p>
             </div>
 
             {/* Source Status Badges */}
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <span className={`metric-pill ${source_statuses?.social === 'success' ? 'metric-pill-green' : 'metric-pill-amber'}`}>
-                💬 Reddit: {source_statuses?.social || 'Pending'}
+              <span className={`metric-pill ${source_statuses?.social === 'success' ? 'metric-pill-green' : 'metric-pill-amber'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <IconReddit size={14} />
+                <span>Reddit: {source_statuses?.social || 'Pending'}</span>
               </span>
-              <span className={`metric-pill ${source_statuses?.web === 'success' ? 'metric-pill-green' : 'metric-pill-amber'}`}>
-                📰 Web/News: {source_statuses?.web || 'Pending'}
+              <span className={`metric-pill ${source_statuses?.web === 'success' ? 'metric-pill-green' : 'metric-pill-amber'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <IconNews size={14} />
+                <span>Web/News: {source_statuses?.web || 'Pending'}</span>
               </span>
-              <span className={`metric-pill ${source_statuses?.llm === 'success' ? 'metric-pill-green' : 'metric-pill-amber'}`}>
-                🤖 LLM: {source_statuses?.llm || 'Pending'}
+              <span className={`metric-pill ${source_statuses?.youtube === 'success' ? 'metric-pill-green' : source_statuses?.youtube === 'failed' || source_statuses?.youtube === 'quota_exceeded' ? 'metric-pill-amber' : 'metric-pill-cyan'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <IconYouTube size={14} />
+                <span>YouTube: {source_statuses?.youtube || 'Pending'}</span>
+              </span>
+              <span className={`metric-pill ${source_statuses?.llm === 'success' ? 'metric-pill-green' : 'metric-pill-amber'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <IconBot size={14} />
+                <span>LLM: {source_statuses?.llm || 'Pending'}</span>
               </span>
             </div>
           </div>
@@ -133,44 +159,58 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
           <button 
             className={`tab-btn ${activeReportTab === 'overview' ? 'active' : ''}`}
             onClick={() => setActiveReportTab('overview')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
           >
-            📊 Overview
+            <IconOverview size={15} />
+            <span>Overview</span>
           </button>
           <button 
             className={`tab-btn ${activeReportTab === 'narratives' ? 'active' : ''}`}
             onClick={() => setActiveReportTab('narratives')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
           >
-            📖 Narratives ({narratives?.length || 0})
+            <IconBookOpen size={15} />
+            <span>Narratives ({narratives?.length || 0})</span>
           </button>
           <button 
             className={`tab-btn ${activeReportTab === 'ai_answers' ? 'active' : ''}`}
             onClick={() => setActiveReportTab('ai_answers')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
           >
-            🤖 AI Answers &amp; Ecosystem
+            <IconBot size={15} />
+            <span>AI Answers &amp; Ecosystem</span>
           </button>
           <button 
             className={`tab-btn ${activeReportTab === 'audiences' ? 'active' : ''}`}
             onClick={() => setActiveReportTab('audiences')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
           >
-            👥 Audiences ({audience_segments?.length || 0})
+            <IconUsers size={15} />
+            <span>Audiences ({audience_segments?.length || 0})</span>
           </button>
           <button 
             className={`tab-btn ${activeReportTab === 'gaps' ? 'active' : ''}`}
             onClick={() => setActiveReportTab('gaps')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
           >
-            🔍 Content Gaps ({content_gaps?.length || 0})
+            <IconLayers size={15} />
+            <span>Content Gaps ({content_gaps?.length || 0})</span>
           </button>
           <button 
             className={`tab-btn ${activeReportTab === 'evidence' ? 'active' : ''}`}
             onClick={() => setActiveReportTab('evidence')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
           >
-            📑 Evidence ({evidence?.length || 0})
+            <IconFileText size={15} />
+            <span>Evidence ({evidence?.length || 0})</span>
           </button>
           <button 
             className={`tab-btn ${activeReportTab === 'timeline' ? 'active' : ''}`}
             onClick={() => setActiveReportTab('timeline')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
           >
-            ⏳ Timeline
+            <IconClock size={15} />
+            <span>Timeline</span>
           </button>
         </div>
 
@@ -179,7 +219,7 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
               <div className="glass-card" style={{ padding: '24px' }}>
-                <h4 style={{ color: 'var(--accent-cyan)', fontSize: '0.9rem', textTransform: 'uppercase', marginBottom: '12px' }}>
+                <h4 style={{ color: 'var(--brand-teal)', fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: '12px', fontWeight: 600 }}>
                   Strategic "Why Now?" Synthesis
                 </h4>
                 <p style={{ color: 'var(--text-primary)', lineHeight: '1.6', fontSize: '0.95rem' }}>
@@ -188,21 +228,27 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
               </div>
 
               <div className="glass-card" style={{ padding: '24px' }}>
-                <h4 style={{ color: 'var(--accent-emerald)', fontSize: '0.9rem', textTransform: 'uppercase', marginBottom: '12px' }}>
+                <h4 style={{ color: 'var(--action-primary)', fontSize: '0.85rem', textTransform: 'uppercase', marginBottom: '12px', fontWeight: 600 }}>
                   Source Coverage &amp; Provenance
                 </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.9rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.9rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-secondary)' }}>Normalized Evidence Records:</span>
-                    <strong style={{ color: '#fff' }}>{evidence?.length || 0} items</strong>
+                    <strong style={{ color: 'var(--text-primary)' }}>{evidence?.length || 0} items</strong>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: 'var(--text-secondary)' }}>YouTube Media Sampled:</span>
+                    <strong style={{ color: 'var(--brand-teal)' }}>
+                      {(evidence?.filter(e => e.platform === 'youtube' && e.metadata?.retrieval_method === 'video_metadata') || []).length} videos • {(evidence?.filter(e => e.platform === 'youtube' && e.metadata?.retrieval_method === 'comment_thread') || []).length} comments
+                    </strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-secondary)' }}>Ecosystem Coverage:</span>
-                    <strong style={{ color: 'var(--accent-emerald)' }}>{Math.round((llm_analysis?.coverage || 0.85) * 100)}%</strong>
+                    <strong style={{ color: 'var(--status-success)' }}>{Math.round((llm_analysis?.coverage || 0.85) * 100)}%</strong>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span style={{ color: 'var(--text-secondary)' }}>Generated Content Opportunities:</span>
-                    <strong style={{ color: 'var(--accent-cyan)' }}>{opportunities?.length || 0} briefs</strong>
+                    <strong style={{ color: 'var(--action-primary)' }}>{opportunities?.length || 0} briefs</strong>
                   </div>
                 </div>
               </div>
@@ -211,34 +257,37 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
             {/* Recommended Opportunities Quick List */}
             {opportunities && opportunities.length > 0 && (
               <div className="glass-card" style={{ padding: '24px' }}>
-                <h3 style={{ fontSize: '1.2rem', marginBottom: '16px' }}>Recommended Editorial Opportunities</h3>
+                <h3 style={{ fontSize: '1.15rem', marginBottom: '16px', color: 'var(--text-primary)', fontWeight: 600 }}>
+                  Recommended Editorial Opportunities
+                </h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
                   {opportunities.map((opp: any, idx: number) => (
-                    <div key={idx} style={{ padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid var(--border-glass)' }}>
+                    <div key={idx} style={{ padding: '18px', background: '#FFFFFF', borderRadius: '10px', border: '1px solid var(--border-subtle)', boxShadow: 'var(--shadow-sm)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                         <span className="badge badge-cyan">{opp.audience_label || 'Target Audience'}</span>
-                        <span style={{ color: 'var(--accent-emerald)', fontWeight: 700 }}>
+                        <span style={{ color: 'var(--status-success)', fontWeight: 700 }}>
                           {Math.round((opp.score || 0.85) * 100)} / 100
                         </span>
                       </div>
-                      <h4 style={{ color: '#fff', fontSize: '1.05rem', marginBottom: '8px' }}>{opp.title}</h4>
-                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '12px' }}>
+                      <h4 style={{ color: 'var(--text-primary)', fontSize: '1.05rem', marginBottom: '8px', fontWeight: 600 }}>{opp.title}</h4>
+                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '14px', lineHeight: '1.5' }}>
                         {opp.content_gap}
                       </p>
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <button 
-                          className="btn-primary" 
-                          style={{ flex: 1, padding: '8px', fontSize: '0.8rem', background: 'rgba(255,255,255,0.06)', color: 'var(--accent-cyan)', border: '1px solid var(--border-light)', boxShadow: 'none' }}
+                          className="btn-outline" 
+                          style={{ flex: 1, padding: '8px 12px', fontSize: '0.85rem' }}
                           onClick={() => onSelectOpportunity(opp)}
                         >
                           View Brief
                         </button>
                         <button 
                           className="btn-emerald" 
-                          style={{ padding: '8px 12px', fontSize: '0.8rem' }}
+                          style={{ padding: '8px 14px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
                           onClick={() => onDownloadPdf(opp.opportunity_id || opp.title)}
                         >
-                          📄 PDF
+                          <IconFilePdf size={13} />
+                          <span>PDF</span>
                         </button>
                       </div>
                     </div>
@@ -255,7 +304,7 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
             {narratives?.map((nar: any, idx: number) => (
               <div key={idx} className="glass-card" style={{ padding: '24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <h3 style={{ fontSize: '1.25rem', color: '#fff' }}>{nar.name}</h3>
+                  <h3 style={{ fontSize: '1.25rem', color: 'var(--text-primary)', fontWeight: 600 }}>{nar.name}</h3>
                   <span className="badge badge-cyan">{nar.sentiment || 'Neutral'} Sentiment</span>
                 </div>
                 <p style={{ color: 'var(--text-primary)', lineHeight: '1.6', fontSize: '0.95rem', marginBottom: '16px' }}>
@@ -263,15 +312,16 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
                 </p>
                 {/* Supporting Evidence Chips */}
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Supporting Evidence:</span>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Supporting Evidence:</span>
                   {evidence?.slice(0, 3).map((ev) => (
                     <button
                       key={ev.evidence_id}
                       onClick={() => onSelectEvidence(ev, nar.name)}
                       className="metric-pill metric-pill-cyan"
-                      style={{ cursor: 'pointer', border: '1px solid rgba(6,182,212,0.3)' }}
+                      style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
                     >
-                      📑 {ev.platform}: {ev.title?.slice(0, 24)}...
+                      <IconFileText size={12} />
+                      <span>{ev.platform}: {ev.title?.slice(0, 26)}...</span>
                     </button>
                   ))}
                 </div>
@@ -285,7 +335,7 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
           <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div className="glass-card" style={{ padding: '24px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <h3 style={{ fontSize: '1.2rem', margin: 0 }}>LLM Ecosystem Response Patterns</h3>
+                <h3 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--text-primary)' }}>LLM Ecosystem Response Patterns</h3>
                 <span className="badge badge-emerald">
                   Sample Coverage: {Math.round((llm_analysis?.coverage || 0.85) * 100)}%
                 </span>
@@ -295,16 +345,16 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
               </p>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
-                <div style={{ padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px' }}>
+                <div style={{ padding: '16px', background: '#FFFFFF', borderRadius: '10px', border: '1px solid var(--border-subtle)', boxShadow: 'var(--shadow-sm)' }}>
                   <div className="subheading-label">Consensus Across Monitored Models:</div>
-                  <p style={{ color: '#fff', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                  <p style={{ color: 'var(--text-primary)', fontSize: '0.9rem', lineHeight: '1.5', margin: 0 }}>
                     {llm_analysis?.consensus || 'Models agree on general terminology and core definitions.'}
                   </p>
                 </div>
 
-                <div style={{ padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: '10px' }}>
+                <div style={{ padding: '16px', background: '#FFFFFF', borderRadius: '10px', border: '1px solid var(--border-subtle)', boxShadow: 'var(--shadow-sm)' }}>
                   <div className="subheading-label">Identified Model Divergence &amp; Gaps:</div>
-                  <p style={{ color: '#fff', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                  <p style={{ color: 'var(--text-primary)', fontSize: '0.9rem', lineHeight: '1.5', margin: 0 }}>
                     {llm_analysis?.divergence || 'Models lack practical localized steps and conflicting advice on implementation.'}
                   </p>
                 </div>
@@ -330,8 +380,9 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
                   <div className="subheading-label">Repeatedly Cited External Domains:</div>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     {llm_analysis.citation_concentration.map((domain: string, i: number) => (
-                      <span key={i} className="metric-pill metric-pill-cyan">
-                        🔗 {domain}
+                      <span key={i} className="metric-pill metric-pill-cyan" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                        <IconExternalLink size={12} />
+                        <span>{domain}</span>
                       </span>
                     ))}
                   </div>
@@ -351,7 +402,7 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
                     <span className="badge badge-cyan">Discovered Persona</span>
                     <span className="badge badge-emerald">High Demand</span>
                   </div>
-                  <h4 style={{ fontSize: '1.25rem', color: '#fff', marginBottom: '8px' }}>{aud.label}</h4>
+                  <h4 style={{ fontSize: '1.25rem', color: 'var(--text-primary)', marginBottom: '8px', fontWeight: 600 }}>{aud.label}</h4>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.5', marginBottom: '16px' }}>
                     {aud.description}
                   </p>
@@ -360,8 +411,9 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
                       <div className="subheading-label">Information Needs:</div>
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         {aud.needs.map((n: string, i: number) => (
-                          <span key={i} className="metric-pill metric-pill-cyan" style={{ fontSize: '0.78rem' }}>
-                            ✓ {n}
+                          <span key={i} className="metric-pill metric-pill-cyan" style={{ fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <IconCheck size={11} />
+                            <span>{n}</span>
                           </span>
                         ))}
                       </div>
@@ -389,7 +441,7 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
                 <span className="badge badge-amber" style={{ marginBottom: '8px', display: 'inline-block' }}>
                   Verified Market Void
                 </span>
-                <h4 style={{ fontSize: '1.2rem', color: '#fff', marginBottom: '8px' }}>
+                <h4 style={{ fontSize: '1.2rem', color: 'var(--text-primary)', marginBottom: '8px', fontWeight: 600 }}>
                   {gap.problem || 'Underserved audience friction point'}
                 </h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px', marginTop: '12px' }}>
@@ -416,7 +468,7 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
           <div className="animate-fade-in">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
               <div>
-                <h3 style={{ fontSize: '1.2rem', margin: 0 }}>Normalized Evidence Catalog ({evidence?.length || 0})</h3>
+                <h3 style={{ fontSize: '1.2rem', margin: 0, color: 'var(--text-primary)' }}>Normalized Evidence Catalog ({evidence?.length || 0})</h3>
                 <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                   Click any evidence record to open the detailed provenance drawer.
                 </span>
@@ -440,43 +492,71 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
                     ev.platform?.toLowerCase().includes(q) ||
                     ev.author?.toLowerCase().includes(q));
                 })
-                .map((ev) => (
-                  <div
-                    key={ev.evidence_id}
-                    onClick={() => onSelectEvidence(ev)}
-                    className="glass-card"
-                    style={{ padding: '16px', cursor: 'pointer', transition: 'all 0.2s ease', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
-                  >
-                    <div style={{ flex: 1, paddingRight: '16px' }}>
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
-                        <span className="badge badge-cyan" style={{ fontSize: '0.65rem' }}>
-                          {ev.source_type.toUpperCase()}
-                        </span>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                          {ev.platform} • {ev.author || 'Source'}
-                        </span>
-                        <span className={`badge ${ev.is_inferred ? 'badge-amber' : 'badge-emerald'}`} style={{ fontSize: '0.65rem' }}>
-                          {ev.is_inferred ? 'Inferred' : 'Observed'}
-                        </span>
+                .map((ev) => {
+                  const isYt = ev.platform === 'youtube';
+                  const isYtComment = isYt && ev.metadata?.retrieval_method === 'comment_thread';
+                  const badgeLabel = isYt ? (isYtComment ? 'YOUTUBE COMMENT' : 'YOUTUBE VIDEO') : ev.source_type.toUpperCase();
+
+                  return (
+                    <div
+                      key={ev.evidence_id}
+                      onClick={() => onSelectEvidence(ev)}
+                      className="glass-card"
+                      style={{ padding: '16px', cursor: 'pointer', transition: 'all 0.2s ease', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}
+                    >
+                      {ev.metadata?.thumbnail_url && (
+                        <div style={{ flexShrink: 0, width: '64px', height: '48px', overflow: 'hidden', borderRadius: '6px', background: 'var(--surface-secondary)' }}>
+                          <img
+                            src={ev.metadata.thumbnail_url}
+                            alt="thumb"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        </div>
+                      )}
+                      <div style={{ flex: 1, paddingRight: '12px' }}>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap' }}>
+                          <span className="badge badge-cyan" style={{ fontSize: '0.65rem' }}>
+                            {badgeLabel}
+                          </span>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            {ev.metadata?.channel_title || ev.author || ev.platform}
+                          </span>
+                          <span className={`badge ${ev.is_inferred ? 'badge-amber' : 'badge-emerald'}`} style={{ fontSize: '0.65rem' }}>
+                            {ev.is_inferred ? 'Inferred' : 'Observed'}
+                          </span>
+                          {isYt && !isYtComment && typeof ev.engagement?.views === 'number' && (
+                            <span style={{ fontSize: '0.75rem', color: 'var(--action-primary)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <IconEye size={12} />
+                              <span>{ev.engagement.views.toLocaleString()} views</span>
+                            </span>
+                          )}
+                          {isYtComment && typeof ev.engagement?.likes === 'number' && (
+                            <span style={{ fontSize: '0.75rem', color: 'var(--status-success)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <IconThumbsUp size={12} />
+                              <span>{ev.engagement.likes} likes</span>
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.95rem', marginBottom: '4px' }}>
+                          {ev.title || 'Evidence Record'}
+                        </div>
+                        <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineClamp: 2, display: '-webkit-box', WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                          "{ev.text_excerpt}"
+                        </div>
                       </div>
-                      <div style={{ fontWeight: 600, color: '#fff', fontSize: '0.95rem', marginBottom: '4px' }}>
-                        {ev.title || 'Evidence Record'}
-                      </div>
-                      <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', lineClamp: 2, display: '-webkit-box', WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                        "{ev.text_excerpt}"
+                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                        <div style={{ color: 'var(--status-success)', fontWeight: 700, fontSize: '0.9rem' }}>
+                          {Math.round(ev.confidence * 100)}%
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Confidence</div>
+                        <span style={{ color: 'var(--action-primary)', fontSize: '0.8rem', marginTop: '6px', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 500 }}>
+                          <span>Inspect</span>
+                          <IconArrowRight size={11} />
+                        </span>
                       </div>
                     </div>
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{ color: 'var(--accent-emerald)', fontWeight: 700, fontSize: '0.9rem' }}>
-                        {Math.round(ev.confidence * 100)}%
-                      </div>
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Confidence</div>
-                      <span style={{ color: 'var(--accent-cyan)', fontSize: '0.8rem', marginTop: '6px', display: 'inline-block' }}>
-                        Inspect →
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
             </div>
           </div>
         )}
@@ -484,26 +564,26 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
         {/* SUB-TAB 7: Timeline */}
         {activeReportTab === 'timeline' && (
           <div className="animate-fade-in glass-card" style={{ padding: '24px' }}>
-            <h3 style={{ fontSize: '1.2rem', marginBottom: '20px' }}>Investigation Pipeline Timeline</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative', paddingLeft: '24px', borderLeft: '2px solid var(--accent-cyan)' }}>
+            <h3 style={{ fontSize: '1.2rem', marginBottom: '20px', color: 'var(--text-primary)', fontWeight: 600 }}>Investigation Pipeline Timeline</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'relative', paddingLeft: '24px', borderLeft: '2px solid var(--action-primary)' }}>
               <div>
-                <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.95rem' }}>1. Research Plan Synthesized</div>
+                <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>1. Research Plan Synthesized</div>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>LangGraph planner formulated bounded social queries, web probes, and ecosystem questions.</div>
               </div>
               <div>
-                <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.95rem' }}>2. Multi-Channel Evidence Harvested</div>
+                <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>2. Multi-Channel Evidence Harvested</div>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Gathered and normalized {evidence?.length || 0} observations across Reddit, Google News, and AI assistants.</div>
               </div>
               <div>
-                <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.95rem' }}>3. Deduplication &amp; Hashing Completed</div>
+                <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>3. Deduplication &amp; Hashing Completed</div>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>URL and SHA-256 content deduplication removed duplicate excerpts.</div>
               </div>
               <div>
-                <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.95rem' }}>4. Audience Personas &amp; Content Gaps Uncovered</div>
+                <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>4. Audience Personas &amp; Content Gaps Uncovered</div>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Identified {audience_segments?.length || 0} distinct audience personas and {content_gaps?.length || 0} content voids.</div>
               </div>
               <div>
-                <div style={{ fontWeight: 700, color: 'var(--accent-emerald)', fontSize: '0.95rem' }}>5. Opportunities Scored &amp; Dossier Finalized</div>
+                <div style={{ fontWeight: 700, color: 'var(--status-success)', fontSize: '0.95rem' }}>5. Opportunities Scored &amp; Dossier Finalized</div>
                 <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Ranked {opportunities?.length || 0} content opportunities with full ReportLab PDF export.</div>
               </div>
             </div>
@@ -518,26 +598,33 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
     <div className="page-container animate-fade-in">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h1 style={{ fontSize: '2.2rem', marginBottom: '8px' }}>Autonomous Investigations</h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '1rem', maxWidth: '680px' }}>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '6px' }}>
+            Autonomous Investigations
+          </h1>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem', maxWidth: '680px', margin: 0 }}>
             Multi-agent research pipelines collecting evidence across social channels, web media, and AI answer ecosystems.
           </p>
         </div>
-        <button onClick={onRefresh} className="btn-outline" style={{ fontSize: '0.9rem' }}>
-          ↻ Refresh Runs
+        <button 
+          onClick={onRefresh} 
+          className="btn-outline" 
+          style={{ fontSize: '0.875rem', padding: '9px 16px', display: 'flex', alignItems: 'center', gap: '6px' }}
+        >
+          <IconRefresh size={14} />
+          <span>Refresh Runs</span>
         </button>
       </div>
 
       {/* Manual Quick Dispatch Form */}
-      <div className="glass-card" style={{ padding: '20px', marginBottom: '28px' }}>
-        <h3 style={{ fontSize: '1.1rem', marginBottom: '8px' }}>Dispatch New Research Investigation</h3>
+      <div className="glass-card" style={{ padding: '24px', marginBottom: '28px' }}>
+        <h3 style={{ fontSize: '1.15rem', marginBottom: '6px', color: 'var(--text-primary)', fontWeight: 600 }}>Dispatch New Research Investigation</h3>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '16px' }}>
           Enter any trending keyword or topic to run the full LangGraph evidence collection pipeline.
         </p>
         <form onSubmit={(e) => { e.preventDefault(); if (customTopic) { onLaunchNew(customTopic); setCustomTopic(''); } }} style={{ display: 'flex', gap: '12px' }}>
           <input
             type="text"
-            placeholder="E.g., AI tutors, Solar Microgrids, Quantum Sensors..."
+            placeholder="E.g., Generative Search Optimization, Solar Microgrids, Quantum Sensors..."
             value={customTopic}
             onChange={(e) => setCustomTopic(e.target.value)}
             className="input-glass"
@@ -556,24 +643,46 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
           const isFailed = inv.status === 'failed';
 
           return (
-            <div key={inv.investigation_id} className="glass-card" style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+            <div key={inv.investigation_id} className="glass-card" style={{ padding: '22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
               <div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' }}>
                   <span className={`badge ${isComplete ? 'badge-emerald' : isFailed ? 'badge-amber' : 'badge-cyan'}`}>
                     {inv.status.toUpperCase()}
                   </span>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                     Region: {inv.region} • ID: {inv.investigation_id}
                   </span>
                 </div>
-                <h3 style={{ fontSize: '1.25rem', color: '#fff', textTransform: 'capitalize', marginBottom: '6px' }}>
+                <h3 style={{ fontSize: '1.25rem', color: 'var(--text-primary)', textTransform: 'capitalize', marginBottom: '8px', fontWeight: 600 }}>
                   {inv.topic}
                 </h3>
-                <div style={{ display: 'flex', gap: '12px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                  <span>Stage: <strong style={{ color: 'var(--accent-cyan)' }}>{inv.stage}</strong></span>
-                  <span>Evidence: <strong style={{ color: '#fff' }}>{inv.evidence_count} records</strong></span>
-                  <span>Opportunities: <strong style={{ color: 'var(--accent-emerald)' }}>{inv.opportunities_count} briefs</strong></span>
+                <div style={{ display: 'flex', gap: '16px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                  <span>Stage: <strong style={{ color: 'var(--action-primary)' }}>{inv.stage}</strong></span>
+                  <span>Evidence: <strong style={{ color: 'var(--text-primary)' }}>{inv.evidence_count} records</strong></span>
+                  <span>Opportunities: <strong style={{ color: 'var(--brand-teal)' }}>{inv.opportunities_count} briefs</strong></span>
                 </div>
+                {inv.source_statuses && (
+                  <div style={{ display: 'flex', gap: '6px', marginTop: '10px', flexWrap: 'wrap' }}>
+                    {inv.source_statuses.youtube && (
+                      <span className="badge badge-cyan" style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <IconYouTube size={12} />
+                        <span>YT: {inv.source_statuses.youtube}</span>
+                      </span>
+                    )}
+                    {inv.source_statuses.social && (
+                      <span className={`badge ${inv.source_statuses.social === 'degraded' ? 'badge-amber' : 'badge-cyan'}`} style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <IconReddit size={12} />
+                        <span>Reddit: {inv.source_statuses.social}</span>
+                      </span>
+                    )}
+                    {inv.source_statuses.web && (
+                      <span className="badge badge-cyan" style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <IconNews size={12} />
+                        <span>Web: {inv.source_statuses.web}</span>
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Action Buttons */}
@@ -581,25 +690,28 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
                 {isComplete && (
                   <button 
                     className="btn-primary"
-                    style={{ padding: '10px 18px', fontSize: '0.85rem' }}
+                    style={{ padding: '10px 18px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
                     onClick={() => setSelectedInvId(inv.investigation_id)}
                   >
-                    Open Intelligence Report →
+                    <span>Open Intelligence Report</span>
+                    <IconArrowRight size={13} />
                   </button>
                 )}
                 {isFailed && (
                   <button 
                     className="btn-outline"
-                    style={{ borderColor: 'var(--accent-amber)', color: 'var(--accent-amber)' }}
+                    style={{ borderColor: 'var(--warning-amber)', color: 'var(--warning-amber)', display: 'flex', alignItems: 'center', gap: '6px' }}
                     onClick={() => handleRetry(inv.investigation_id)}
                     disabled={retryingId === inv.investigation_id}
                   >
-                    {retryingId === inv.investigation_id ? 'Retrying...' : '↻ Retry Sources'}
+                    <IconRefresh size={13} />
+                    <span>{retryingId === inv.investigation_id ? 'Retrying...' : 'Retry Sources'}</span>
                   </button>
                 )}
                 {!isComplete && !isFailed && (
-                  <span className="badge badge-cyan" style={{ padding: '8px 12px' }}>
-                    ⏳ Running Agents...
+                  <span className="badge badge-cyan" style={{ padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span className="pulse-dot" />
+                    <span>Running Agents...</span>
                   </span>
                 )}
               </div>
@@ -609,7 +721,7 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
 
         {investigations.length === 0 && (
           <div className="glass-card" style={{ textAlign: 'center', padding: '60px' }}>
-            <h3>No Investigations Dispatched Yet</h3>
+            <h3 style={{ color: 'var(--text-primary)' }}>No Investigations Dispatched Yet</h3>
             <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>
               Dispatch an investigation above or click "Launch Investigation" on any trend in Trend Radar.
             </p>

@@ -7,12 +7,20 @@ import type {
   AudienceSegment,
   InvestigationSummary,
   EvidenceDetail,
-  UserRole
+  UserRole,
+  ProviderHealthSummary
 } from './types';
 
 import { Sidebar } from './components/Sidebar';
 import type { NavPage } from './components/Sidebar';
 import { EvidenceDrawer } from './components/EvidenceDrawer';
+import {
+  IconFilePdf,
+  IconClose,
+  IconCheck,
+  IconVideo,
+  IconLightning
+} from './components/Icons';
 
 import { OverviewPage } from './pages/OverviewPage';
 import { TrendRadarPage } from './pages/TrendRadarPage';
@@ -22,7 +30,7 @@ import { ContentStudioPage } from './pages/ContentStudioPage';
 import { WatchlistsPage } from './pages/WatchlistsPage';
 import { AdminPage } from './pages/AdminPage';
 
-const API_BASE = 'http://127.0.0.1:8001/api/v1';
+import { API_BASE } from './apiConfig';
 
 export function App() {
   // Navigation & Role
@@ -35,6 +43,7 @@ export function App() {
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [audiences, setAudiences] = useState<AudienceSegment[]>([]);
   const [investigations, setInvestigations] = useState<InvestigationSummary[]>([]);
+  const [providerHealth, setProviderHealth] = useState<ProviderHealthSummary | null>(null);
 
   // Async States
   const [syncing, setSyncing] = useState<boolean>(false);
@@ -101,13 +110,43 @@ export function App() {
     }
   };
 
+  // 5. Fetch Truthful Runtime Provider Health
+  const fetchProviderHealth = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/trends/provider-health`);
+      if (res.ok) {
+        const data = await res.json();
+        setProviderHealth(data);
+      }
+    } catch (err) {
+      console.error('Failed to load provider health:', err);
+    }
+  };
+
   // Initial Load
   useEffect(() => {
     fetchTrends(region);
     fetchOpportunities();
     fetchAudiences();
     fetchInvestigations();
+    fetchProviderHealth();
   }, [region]);
+
+  // Auto-poll active investigations until complete
+  useEffect(() => {
+    const hasActive = investigations.some(
+      (inv) => inv.status === 'running' || inv.status === 'pending'
+    );
+    if (!hasActive) return;
+
+    const timer = setInterval(() => {
+      fetchInvestigations();
+      fetchOpportunities();
+      fetchAudiences();
+    }, 2500);
+
+    return () => clearInterval(timer);
+  }, [investigations]);
 
   // Handle Region Change
   const handleRegionChange = (newRegion: string) => {
@@ -240,17 +279,19 @@ export function App() {
         {statusMsg && (
           <div
             style={{
-              background: 'rgba(6, 182, 212, 0.1)',
-              border: '1px solid var(--accent-cyan)',
-              color: 'var(--accent-cyan)',
-              padding: '12px 20px',
-              borderRadius: '12px',
-              marginBottom: '24px',
+              background: 'var(--action-subtle)',
+              border: '1px solid #D2E3FC',
+              color: 'var(--action-primary)',
+              padding: '10px 16px',
+              borderRadius: '8px',
+              marginBottom: '20px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              fontSize: '0.9rem',
-              animation: 'fadeIn 0.2s ease-out'
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              boxShadow: 'var(--shadow-sm)',
+              animation: 'fadeIn 0.15s ease-out'
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -259,9 +300,10 @@ export function App() {
             </div>
             <button
               onClick={() => setStatusMsg('')}
-              style={{ background: 'none', border: 'none', color: 'var(--accent-cyan)', cursor: 'pointer', fontSize: '1rem' }}
+              style={{ background: 'none', border: 'none', color: 'var(--action-primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
+              title="Dismiss"
             >
-              ✕
+              <IconClose size={14} />
             </button>
           </div>
         )}
@@ -272,6 +314,7 @@ export function App() {
             trends={trends}
             opportunities={opportunities}
             investigations={investigations}
+            providerHealth={providerHealth}
             onNavigateToRadar={() => setActivePage('radar')}
             onNavigateToInvestigations={() => setActivePage('investigations')}
             onNavigateToOpportunities={() => setActivePage('audiences_opps')}
@@ -354,16 +397,17 @@ export function App() {
                     </span>
                   )}
                 </div>
-                <h2 style={{ fontSize: '1.6rem', color: '#fff', margin: 0 }}>
+                <h2 style={{ fontSize: '1.45rem', color: 'var(--text-primary)', margin: 0, fontWeight: 700 }}>
                   {selectedBrief.title}
                 </h2>
               </div>
               <button
                 className="btn-outline"
-                style={{ padding: '4px 12px', fontSize: '1.2rem' }}
+                style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 onClick={() => setSelectedBrief(null)}
+                title="Close modal"
               >
-                ✕
+                <IconClose size={16} />
               </button>
             </div>
 
@@ -399,7 +443,7 @@ export function App() {
 
             <div className="brief-section">
               <div className="brief-label">Recommended Editorial Angle &amp; Strategy</div>
-              <div className="brief-value" style={{ color: 'var(--accent-cyan)' }}>
+              <div className="brief-value" style={{ color: 'var(--brand-teal)' }}>
                 {selectedBrief.recommended_angle || 'Create structured explanatory breakdown with step-by-step guidance.'}
               </div>
             </div>
@@ -409,8 +453,9 @@ export function App() {
               <div className="brief-section" style={{ margin: 0 }}>
                 <div className="brief-label">Recommended Formats</div>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
-                  <span className="metric-pill metric-pill-cyan">
-                    📹 {selectedBrief.recommended_format || 'Deep-Dive Video Script'}
+                  <span className="metric-pill metric-pill-cyan" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    <IconVideo size={14} />
+                    <span>{selectedBrief.recommended_format || 'Deep-Dive Video Script'}</span>
                   </span>
                   {selectedBrief.supported_formats && selectedBrief.supported_formats.map((fmt, i) => (
                     <span key={i} className="metric-pill metric-pill-green">
@@ -447,19 +492,30 @@ export function App() {
             <div style={{ display: 'flex', gap: '12px', marginTop: '24px', flexWrap: 'wrap' }}>
               <button
                 className="btn-emerald"
-                style={{ flex: 1, minWidth: '200px' }}
+                style={{ flex: 1, minWidth: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                 onClick={() => handleDownloadPdf(selectedBrief.opportunity_id)}
                 disabled={downloadingPdfId === selectedBrief.opportunity_id}
               >
-                {downloadingPdfId === selectedBrief.opportunity_id ? '⏳ Downloading PDF...' : '📄 Download PDF Brief'}
+                <IconFilePdf size={16} />
+                <span>{downloadingPdfId === selectedBrief.opportunity_id ? 'Downloading PDF...' : 'Download PDF Brief'}</span>
               </button>
 
               <button
                 className="btn-primary"
-                style={{ flex: 1, minWidth: '200px' }}
+                style={{ flex: 1, minWidth: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
                 onClick={() => handleStageToStudio(selectedBrief.opportunity_id)}
               >
-                {selectedBrief.status === 'selected' ? '✓ Staged to Content Studio' : '🚀 Stage for Content Studio'}
+                {selectedBrief.status === 'selected' ? (
+                  <>
+                    <IconCheck size={16} />
+                    <span>Staged to Content Studio</span>
+                  </>
+                ) : (
+                  <>
+                    <IconLightning size={16} />
+                    <span>Stage for Content Studio</span>
+                  </>
+                )}
               </button>
 
               <button className="btn-outline" onClick={() => setSelectedBrief(null)}>

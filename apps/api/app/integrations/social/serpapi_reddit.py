@@ -66,10 +66,24 @@ class SerpApiRedditProvider(SocialProvider):
 
                 if not evidence_items:
                     from .mock_reddit import MockRedditProvider
-                    return await MockRedditProvider().search(query, region, limit)
+                    items = await MockRedditProvider().search(query, region, limit)
+                    for it in items:
+                        it.is_inferred = True
+                        if it.metadata is None:
+                            it.metadata = {}
+                        it.metadata["fallback_mock"] = True
+                        it.metadata["is_mock"] = True
+                    return items
 
                 return evidence_items
         except Exception as e:
             print(f"SerpApi Reddit search failed ({e}), falling back to mock.")
             from .mock_reddit import MockRedditProvider
-            return await MockRedditProvider().search(query, region, limit)
+            items = await MockRedditProvider().search(query, region, limit)
+            for it in items:
+                it.is_inferred = True
+                if it.metadata is None:
+                    it.metadata = {}
+                it.metadata["fallback_mock"] = True
+                it.metadata["is_mock"] = True
+            return items

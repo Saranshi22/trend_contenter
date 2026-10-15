@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List
 from ..config import settings
-from .investigation_graph import InvestigationState
+from .state import InvestigationState
 from ..services.llm_engine.factory import get_llm_engine
 
 class AudienceSegment(BaseModel):
@@ -42,4 +42,21 @@ async def discover_audiences(state: InvestigationState) -> dict:
         return {"audience_segments": valid_segments}
     except Exception as e:
         print(f"Error in audience discovery: {e}")
-        return {"errors": [{"source": "audience_agent", "message": str(e)}]}
+        topic = state.get("topic", "")
+        norm_ev = state.get("normalized_evidence", [])
+        ev_ids = [e.get("evidence_id") for e in norm_ev[:2] if e.get("evidence_id")]
+        fallback_segments = [
+            {
+                "segment_id": "seg_practitioners",
+                "label": f"{topic} Practitioners & Enthusiasts",
+                "description": f"Individuals actively exploring implementations and news related to {topic}.",
+                "needs": ["Practical tutorials", "Verified updates"],
+                "questions": [f"What are best practices for {topic}?"],
+                "concerns": ["Complexity and inconsistent information"],
+                "evidence_ids": ev_ids
+            }
+        ]
+        return {
+            "audience_segments": fallback_segments,
+            "errors": [{"source": "audience_agent", "message": str(e)}]
+        }

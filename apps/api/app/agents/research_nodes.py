@@ -7,6 +7,7 @@ from ..agents.utils import deduplicate_evidence, generate_content_hash
 from ..integrations.social.serpapi_reddit import SerpApiRedditProvider
 from ..integrations.web.serpapi_search import SerpApiWebSearchProvider
 from ..integrations.llm_monitoring.engine_monitor import EngineLLMMonitoringProvider
+from ..integrations.video.youtube_data_api import YouTubeDataApiProvider
 
 
 async def research_social(state: Dict[str, Any]) -> Dict[str, Any]:
@@ -28,12 +29,15 @@ async def research_social(state: Dict[str, Any]) -> Dict[str, Any]:
                 item_dict = item.model_dump()
                 item_dict["investigation_id"] = inv_id
                 collected_evidence.append(item_dict)
+                # Truthfully record degraded state if mock fallback was returned
+                if item_dict.get("metadata", {}).get("fallback_mock") or item_dict.get("author") == "mock_user_123":
+                    source_status = "degraded"
         except Exception as e:
             source_status = "failed"
             err_list.append({"source": "social_research", "query": q, "error": str(e)})
 
     # Preserve partial results
-    source_statuses = dict(state.get("source_statuses", {}))
+    source_statuses = dict(state.get("source_statuses") or {})
     source_statuses["social"] = source_status
 
     return {
@@ -66,7 +70,7 @@ async def research_web(state: Dict[str, Any]) -> Dict[str, Any]:
             source_status = "failed"
             err_list.append({"source": "web_research", "query": q, "error": str(e)})
 
-    source_statuses = dict(state.get("source_statuses", {}))
+    source_statuses = dict(state.get("source_statuses") or {})
     source_statuses["web"] = source_status
 
     return {
@@ -176,7 +180,7 @@ async def monitor_llm(state: Dict[str, Any]) -> Dict[str, Any]:
         "citation_concentration": unique_domains[:5] if unique_domains else ["No explicit citations in model outputs"]
     }
 
-    source_statuses = dict(state.get("source_statuses", {}))
+    source_statuses = dict(state.get("source_statuses") or {})
     source_statuses["llm"] = source_status
 
     return {
@@ -187,12 +191,78 @@ async def monitor_llm(state: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+async def research_youtube(state: Dict[str, Any]) -> Dict[str, Any]:
+    """LangGraph node to collect YouTube video intelligence, metadata, and audience comments."""
+    topic = state.get("topic", "")
+    plan = state.get("research_plan", {})
+    queries = plan.get("youtube_queries", []) or [topic]
+    inv_id = state.get("investigation_id", "")
+    region = state.get("region", "IN")
+
+    provider = YouTubeDataApiProvider()
+    collected_evidence: List[Dict[str, Any]] = []
+    source_status = "success"
+    err_list = []
+    top_questions: List[str] = []
+    video_summaries: List[Dict[str, Any]] = []
+
+    if not provider.is_configured:
+        source_statuses = dict(state.get("source_statuses") or {})
+        source_statuses["youtube"] = "not_configured"
+        return {
+            "youtube_evidence": [],
+            "source_statuses": source_statuses,
+            "errors": state.get("errors", []) + [{"source": "youtube_research", "error": "YouTube API key not configured"}]
+        }
+
+    # Bounded retrieval: execute primary query (bounded search quota = 100 units)
+    primary_query = queries[0] if queries else topic
+    try:
+        result = await provider.investigate_trend(
+            topic=primary_query,
+            investigation_id=inv_id,
+            region_code=region,
+            max_videos=10
+        )
+        collected_evidence.extend(result.get("evidence", []))
+        top_questions.extend(result.get("top_questions", []))
+        video_summaries.extend(result.get("videos", []))
+
+        status_result = result.get("status", "success")
+        if status_result == "quota_exceeded":
+            source_status = "quota_exceeded"
+            err_list.append({"source": "youtube_research", "error": result.get("error", "Quota exceeded")})
+        elif status_result == "failed":
+            source_status = "failed"
+            err_list.append({"source": "youtube_research", "error": result.get("error", "Retrieval failed")})
+        elif status_result == "no_results":
+            source_status = "no_results"
+        else:
+            source_status = "success" if collected_evidence else "no_results"
+
+    except Exception as e:
+        source_status = "failed"
+        err_list.append({"source": "youtube_research", "query": primary_query, "error": str(e)})
+
+    source_statuses = dict(state.get("source_statuses") or {})
+    source_statuses["youtube"] = source_status
+
+    return {
+        "youtube_evidence": collected_evidence,
+        "youtube_questions": top_questions,
+        "youtube_videos": video_summaries,
+        "source_statuses": source_statuses,
+        "errors": state.get("errors", []) + err_list
+    }
+
+
 async def normalize_and_deduplicate(state: Dict[str, Any]) -> Dict[str, Any]:
-    """Normalizes all evidence from social, web, and LLM sources and removes duplicates."""
+    """Normalizes all evidence from social, web, youtube, and LLM sources and removes duplicates."""
     all_raw: List[Dict[str, Any]] = (
-        state.get("social_evidence", []) +
-        state.get("web_evidence", []) +
-        state.get("llm_evidence", [])
+        (state.get("social_evidence") or []) +
+        (state.get("web_evidence") or []) +
+        (state.get("youtube_evidence") or []) +
+        (state.get("llm_evidence") or [])
     )
 
     items: List[EvidenceItem] = []

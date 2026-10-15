@@ -44,6 +44,7 @@ class EvidenceDetail(BaseModel):
     confidence: float = 0.85
     is_inferred: bool = False
     engagement: Dict[str, Any] = {}
+    metadata: Dict[str, Any] = {}
 
 class InvestigationDetailResponse(BaseModel):
     investigation_id: str
@@ -96,8 +97,11 @@ async def run_investigation_task(investigation_id: str, request: InvestigationRe
         "research_plan": {},
         "social_evidence": [],
         "web_evidence": [],
+        "youtube_evidence": [],
+        "youtube_questions": [],
+        "youtube_videos": [],
         "llm_evidence": [],
-        "source_statuses": {"social": "pending", "web": "pending", "llm": "pending"},
+        "source_statuses": {"social": "pending", "web": "pending", "youtube": "pending", "llm": "pending"},
         "llm_analysis": {},
         "normalized_evidence": [],
         "narratives": [],
@@ -161,7 +165,7 @@ async def start_investigation(
                 status, stage, source_statuses, created_at, updated_at
             ) VALUES (
                 :iid, :wid, :uid, :top, :reg,
-                'queued', 'Queued', '{"social": "pending", "web": "pending", "llm": "pending"}', NOW(), NOW()
+                'queued', 'Queued', '{"social": "pending", "web": "pending", "youtube": "pending", "llm": "pending"}', NOW(), NOW()
             )
         """),
         {
@@ -292,7 +296,8 @@ async def get_investigation_report(
                 retrieved_at=e["retrieved_at"].isoformat() if e.get("retrieved_at") else None,
                 confidence=float(e.get("confidence") or 0.85),
                 is_inferred=bool(e.get("is_inferred", False)),
-                engagement=_parse(e.get("engagement"), {})
+                engagement=_parse(e.get("engagement"), {}),
+                metadata=_parse(e.get("metadata"), {})
             )
         )
 

@@ -50,6 +50,17 @@ class Settings(BaseSettings):
     WEB_SEARCH_PROVIDER: str = ""
     WEB_SEARCH_API_KEY: str = ""
     
+    YOUTUBE_API_KEY: str = ""
+    YOUTUBE_REGION_CODE: str = "IN"
+    YOUTUBE_MAX_SEARCH_RESULTS: int = 10
+    YOUTUBE_MAX_COMMENT_VIDEOS: int = 3
+    YOUTUBE_MAX_COMMENTS_PER_VIDEO: int = 20
+    YOUTUBE_REQUEST_TIMEOUT_SECONDS: int = 15
+    YOUTUBE_DAILY_QUOTA_BUDGET: int = 10000
+
+    def get_youtube_api_key(self) -> str:
+        return (self.YOUTUBE_API_KEY or self.GEMINI_API_KEY or "").strip()
+
     JWT_SECRET: str = "supersecretkey" # Replace in production
     JWT_EXPIRY_MINUTES: int = 60
 

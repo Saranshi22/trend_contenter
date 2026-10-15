@@ -1,0 +1,38 @@
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: trend-contenter-ingestion
+  labels:
+    cloud.googleapis.com/location: us-central1
+spec:
+  template:
+    spec:
+      taskCount: 1
+      template:
+        spec:
+          timeoutSeconds: 300
+          maxRetries: 2
+          containers:
+            - image: LOCATION-docker.pkg.dev/PROJECT_ID/trend-contenter-repo/api:latest
+              command: ["python", "scripts/poll_trends.py"]
+              resources:
+                limits:
+                  cpu: "1"
+                  memory: 1Gi
+              env:
+                - name: APP_ENV
+                  value: "production"
+                - name: TRENDS_PROVIDER
+                  value: "serpapi"
+                - name: TRENDS_GEO
+                  value: "IN"
+                - name: POSTGRES_URI
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-uri
+                      key: latest
+                - name: SERPAPI_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: serpapi-key
+                      key: latest

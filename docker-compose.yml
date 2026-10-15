@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: trend-contenter-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: trend_contenter
+      POSTGRES_USER: trend_user
+      POSTGRES_PASSWORD: trend_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trend_user -d trend_contenter"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: trend-contenter-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8001:8080"
+    environment:
+      - APP_ENV=production
+      - PORT=8080
+      - POSTGRES_URI=postgresql+asyncpg://trend_user:trend_password@postgres:5432/trend_contenter
+      - TRENDS_PROVIDER=serpapi
+      - LLM_PROVIDER=openai
+      - TRENDS_GEO=IN
+      - TREND_QUALIFICATION_THRESHOLD=0.70
+      - SERPAPI_API_KEY=${SERPAPI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - JWT_SECRET=${JWT_SECRET:-supersecretkey_production}
+    env_file:
+      - .env
+
+  web:
+    build:
+      context: apps/web
+      dockerfile: Dockerfile
+    container_name: trend-contenter-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "5173:8080"
+    environment:
+      - PORT=8080
+
+volumes:
+  pgdata:

@@ -44,6 +44,7 @@ export interface EvidenceDetail {
   confidence: number;
   is_inferred: boolean;
   engagement: Record<string, any>;
+  metadata?: Record<string, any>;
 }
 
 export interface Opportunity {
@@ -161,4 +162,24 @@ export interface AuditLogItem {
   resource_id?: string;
   timestamp: string;
   metadata: Record<string, any>;
+}
+
+export interface ProviderHealthItem {
+  id: string;
+  name: string;
+  provider_type: string;
+  configured: boolean;
+  status: 'healthy' | 'degraded' | 'unavailable' | 'not_configured';
+  label: string;
+  badge_class: string;
+  last_runtime_status?: string | null;
+  details: string;
+}
+
+export interface ProviderHealthSummary {
+  providers: ProviderHealthItem[];
+  all_healthy: boolean;
+  healthy_count: number;
+  total_count: number;
+  headline: string;
 }

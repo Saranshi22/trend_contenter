@@ -213,11 +213,17 @@ async def init_db():
         )
         """
     ]
-    async with engine.begin() as conn:
-        for stmt in statements:
-            clean_stmt = stmt.strip()
-            if clean_stmt:
-                await conn.execute(text(clean_stmt))
+    try:
+        async with engine.begin() as conn:
+            for stmt in statements:
+                clean_stmt = stmt.strip()
+                if clean_stmt:
+                    await conn.execute(text(clean_stmt))
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(
+            f"Postgres init_db warning: {e}. Container will continue running."
+        )
 
 async def get_postgres_session() -> AsyncSession:
     async with AsyncSessionLocal() as session:

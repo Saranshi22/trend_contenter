@@ -5,11 +5,14 @@ from ...config import settings
 import os
 
 def get_llm_engine() -> LLMEngine:
-    provider = (settings.LLM_PROVIDER or os.environ.get("LLM_PROVIDER", "openai")).lower()
+    provider = (settings.LLM_PROVIDER or os.environ.get("LLM_PROVIDER", "")).lower()
     
-    if provider == "openai":
+    if provider == "gemini" or (not settings.OPENAI_API_KEY and (settings.GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY"))):
+        return GeminiEngine()
+    elif provider == "openai" and settings.OPENAI_API_KEY:
         return OpenAIEngine()
-    elif provider == "gemini":
+    elif settings.GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY"):
         return GeminiEngine()
     else:
-        raise ValueError(f"Unsupported LLM provider: {provider}")
+        return OpenAIEngine()
+

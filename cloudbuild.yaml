@@ -1,0 +1,84 @@
+# Google Cloud Build Pipeline for Trend Contenter
+# Builds and deploys backend API and frontend Web to Cloud Run
+steps:
+  # 1. Build Backend API Container
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/trend-contenter-repo/api:$_TAG'
+      - '-t'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/trend-contenter-repo/api:latest'
+      - '-f'
+      - 'apps/api/Dockerfile'
+      - '.'
+    id: 'build-api'
+
+  # 2. Push Backend API Container
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/trend-contenter-repo/api:$_TAG'
+    id: 'push-api'
+
+  # 3. Deploy Backend API to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'trend-contenter-api'
+      - '--image'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/trend-contenter-repo/api:$_TAG'
+      - '--region'
+      - '$_REGION'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--add-cloudsql-instances=$PROJECT_ID:$_REGION:trend-contenter-db'
+      - '--set-secrets=POSTGRES_URI=postgres-uri:latest,SERPAPI_API_KEY=serpapi-key:latest,OPENAI_API_KEY=openai-key:latest,GEMINI_API_KEY=gemini-key:latest,JWT_SECRET=jwt-secret:latest'
+      - '--set-env-vars=APP_ENV=production,TRENDS_PROVIDER=serpapi,LLM_PROVIDER=openai,TRENDS_GEO=IN,TREND_QUALIFICATION_THRESHOLD=0.70'
+    id: 'deploy-api'
+
+  # 4. Build Frontend Web Container
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/trend-contenter-repo/web:$_TAG'
+      - '-t'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/trend-contenter-repo/web:latest'
+      - '-f'
+      - 'apps/web/Dockerfile'
+      - 'apps/web'
+    id: 'build-web'
+
+  # 5. Push Frontend Web Container
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '$_REGION-docker.pkg.dev/$PROJECT_ID/trend-contenter-repo/web:$_TAG'
+    id: 'push-web'
+
+  # 6. Deploy Frontend Web to Cloud Run with API proxy target
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        API_URL=$$(gcloud run services describe trend-contenter-api --region=$_REGION --format="value(status.url)")
+        echo "Configuring frontend proxy to API at: $$API_URL"
+        gcloud run deploy trend-contenter-web \
+          --image=$_REGION-docker.pkg.dev/$PROJECT_ID/trend-contenter-repo/web:$_TAG \
+          --region=$_REGION \
+          --platform=managed \
+          --allow-unauthenticated \
+          --set-env-vars=API_URL=$$API_URL
+    id: 'deploy-web'
+
+substitutions:
+  _REGION: 'us-central1'
+  _TAG: 'latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

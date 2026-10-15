@@ -1,5 +1,14 @@
 import React, { useState } from 'react';
 import type { Opportunity, AudienceSegment } from '../types';
+import {
+  IconOpportunities,
+  IconUsers,
+  IconRefresh,
+  IconFilePdf,
+  IconCheck,
+  IconAlertTriangle,
+  IconArrowRight
+} from '../components/Icons';
 
 interface AudienceOpportunitiesPageProps {
   opportunities: Opportunity[];
@@ -25,13 +34,20 @@ export const AudienceOpportunitiesPage: React.FC<AudienceOpportunitiesPageProps>
       {/* Title */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h1 style={{ fontSize: '2.2rem', marginBottom: '8px' }}>Audience &amp; Opportunities</h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '1rem', maxWidth: '720px' }}>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '6px' }}>
+            Audience &amp; Opportunities
+          </h1>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.92rem', maxWidth: '720px', margin: 0 }}>
             Evidence-backed audience personas and ranked editorial briefs qualified by unmet demand, search acceleration, and media voids.
           </p>
         </div>
-        <button onClick={onRefresh} className="btn-outline" style={{ fontSize: '0.85rem' }}>
-          ↻ Refresh Data
+        <button 
+          onClick={onRefresh} 
+          className="btn-outline" 
+          style={{ fontSize: '0.875rem', padding: '9px 16px', display: 'flex', alignItems: 'center', gap: '6px' }}
+        >
+          <IconRefresh size={14} />
+          <span>Refresh Data</span>
         </button>
       </div>
 
@@ -40,14 +56,18 @@ export const AudienceOpportunitiesPage: React.FC<AudienceOpportunitiesPageProps>
         <button
           className={`tab-btn ${activeTab === 'opportunities' ? 'active' : ''}`}
           onClick={() => setActiveTab('opportunities')}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
         >
-          💡 Content Opportunities ({opportunities.length})
+          <IconOpportunities size={15} />
+          <span>Content Opportunities ({opportunities.length})</span>
         </button>
         <button
           className={`tab-btn ${activeTab === 'audiences' ? 'active' : ''}`}
           onClick={() => setActiveTab('audiences')}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
         >
-          👥 Audience Personas ({audiences.length})
+          <IconUsers size={15} />
+          <span>Audience Personas ({audiences.length})</span>
         </button>
       </div>
 
@@ -56,47 +76,50 @@ export const AudienceOpportunitiesPage: React.FC<AudienceOpportunitiesPageProps>
         <div className="animate-fade-in">
           <div className="grid-2">
             {opportunities.map((opp) => (
-              <div key={opp.opportunity_id} className="glass-card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                  <span className="badge badge-cyan">{opp.audience_label || `Audience: ${opp.segment_id}`}</span>
-                  <div className="score-display" style={{ '--score': opp.score * 100 } as React.CSSProperties}>
-                    <div className="score-inner">{Math.round(opp.score * 100)}</div>
+              <div key={opp.opportunity_id} className="glass-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                    <span className="badge badge-cyan">{opp.audience_label || `Audience: ${opp.segment_id}`}</span>
+                    <div className="score-display" style={{ '--score': opp.score * 100 } as React.CSSProperties}>
+                      <div className="score-inner">{Math.round(opp.score * 100)}</div>
+                    </div>
                   </div>
+
+                  <h4 style={{ fontSize: '1.25rem', marginBottom: '12px', color: 'var(--text-primary)', fontWeight: 600 }}>{opp.title}</h4>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '20px', lineHeight: '1.5' }}>
+                    {opp.content_gap || "A verified gap identified from trend evidence and unanswered audience questions."}
+                  </p>
+
+                  {/* Score breakdown tags */}
+                  {opp.score_breakdown && (
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '20px' }}>
+                      {Object.entries(opp.score_breakdown).slice(0, 3).map(([k, v]) => (
+                        <span key={k} className="metric-pill metric-pill-cyan" style={{ fontSize: '0.75rem', textTransform: 'capitalize' }}>
+                          {k.replace(/_/g, ' ')}: {Math.round((v as number) * 100)}%
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
-                <h4 style={{ fontSize: '1.25rem', marginBottom: '12px', color: '#fff' }}>{opp.title}</h4>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '20px', lineHeight: '1.5' }}>
-                  {opp.content_gap || "A verified gap identified from trend evidence and unanswered audience questions."}
-                </p>
-
-                {/* Score breakdown tags */}
-                {opp.score_breakdown && (
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '16px' }}>
-                    {Object.entries(opp.score_breakdown).slice(0, 3).map(([k, v]) => (
-                      <span key={k} className="metric-pill metric-pill-cyan" style={{ fontSize: '0.75rem', textTransform: 'capitalize' }}>
-                        {k.replace(/_/g, ' ')}: {Math.round((v as number) * 100)}%
-                      </span>
-                    ))}
-                  </div>
-                )}
-
                 {/* Action Row */}
-                <div style={{ display: 'flex', gap: '10px' }}>
+                <div style={{ display: 'flex', gap: '10px', paddingTop: '16px', borderTop: '1px solid var(--border-subtle)' }}>
                   <button 
-                    className="btn-primary" 
-                    style={{ flex: 1, background: 'rgba(255,255,255,0.06)', color: 'var(--accent-cyan)', border: '1px solid var(--border-light)', boxShadow: 'none', padding: '10px 14px', fontSize: '0.9rem' }}
+                    className="btn-outline" 
+                    style={{ flex: 1, padding: '10px 14px', fontSize: '0.9rem' }}
                     onClick={() => onSelectBrief(opp)}
                   >
                     View Brief
                   </button>
                   <button 
                     className="btn-emerald" 
-                    style={{ padding: '10px 16px', fontSize: '0.9rem' }}
+                    style={{ padding: '10px 16px', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}
                     onClick={() => onDownloadPdf(opp.opportunity_id)}
                     disabled={downloadingId === opp.opportunity_id}
                     title="Download Executive PDF Brief"
                   >
-                    {downloadingId === opp.opportunity_id ? '⏳' : '📄 PDF'}
+                    <IconFilePdf size={14} />
+                    <span>{downloadingId === opp.opportunity_id ? 'Downloading...' : 'PDF'}</span>
                   </button>
                 </div>
               </div>
@@ -118,7 +141,7 @@ export const AudienceOpportunitiesPage: React.FC<AudienceOpportunitiesPageProps>
         <div className="animate-fade-in">
           <div className="grid-2">
             {audiences.map((aud) => (
-              <div key={aud.segment_id} className="persona-card">
+              <div key={aud.segment_id} className="persona-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                     <span className="badge badge-cyan">Audience Persona</span>
@@ -127,7 +150,7 @@ export const AudienceOpportunitiesPage: React.FC<AudienceOpportunitiesPageProps>
                     </span>
                   </div>
 
-                  <h4 style={{ fontSize: '1.3rem', color: '#fff', marginBottom: '10px' }}>
+                  <h4 style={{ fontSize: '1.3rem', color: 'var(--text-primary)', marginBottom: '10px', fontWeight: 600 }}>
                     {aud.label}
                   </h4>
 
@@ -141,8 +164,9 @@ export const AudienceOpportunitiesPage: React.FC<AudienceOpportunitiesPageProps>
                       <div className="subheading-label">Core Information Needs:</div>
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         {aud.needs.map((need, idx) => (
-                          <span key={idx} className="metric-pill metric-pill-cyan" style={{ fontSize: '0.78rem' }}>
-                            ✓ {need}
+                          <span key={idx} className="metric-pill metric-pill-cyan" style={{ fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <IconCheck size={11} />
+                            <span>{need}</span>
                           </span>
                         ))}
                       </div>
@@ -167,8 +191,9 @@ export const AudienceOpportunitiesPage: React.FC<AudienceOpportunitiesPageProps>
                       <div className="subheading-label">Friction Points &amp; Concerns:</div>
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         {aud.concerns.map((c, idx) => (
-                          <span key={idx} className="metric-pill metric-pill-amber" style={{ fontSize: '0.78rem' }}>
-                            ⚠ {c}
+                          <span key={idx} className="metric-pill metric-pill-amber" style={{ fontSize: '0.78rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <IconAlertTriangle size={11} />
+                            <span>{c}</span>
                           </span>
                         ))}
                       </div>
@@ -176,13 +201,14 @@ export const AudienceOpportunitiesPage: React.FC<AudienceOpportunitiesPageProps>
                   )}
                 </div>
 
-                <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '16px', marginTop: '12px' }}>
+                <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: '16px', marginTop: '16px' }}>
                   <button 
                     className="btn-outline" 
-                    style={{ width: '100%', borderColor: 'rgba(6, 182, 212, 0.3)', color: 'var(--accent-cyan)' }}
+                    style={{ width: '100%', color: 'var(--action-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
                     onClick={() => setActiveTab('opportunities')}
                   >
-                    View Linked Opportunities →
+                    <span>View Linked Opportunities</span>
+                    <IconArrowRight size={13} />
                   </button>
                 </div>
               </div>
