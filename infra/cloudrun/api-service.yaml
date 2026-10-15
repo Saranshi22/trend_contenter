@@ -1,0 +1,64 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: trend-contenter-api
+  labels:
+    cloud.googleapis.com/location: us-central1
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+        run.googleapis.com/cpu-throttling: "true"
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      containers:
+        - image: LOCATION-docker.pkg.dev/PROJECT_ID/trend-contenter-repo/api:latest
+          resources:
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          ports:
+            - containerPort: 8080
+          env:
+            - name: APP_ENV
+              value: "production"
+            - name: TRENDS_PROVIDER
+              value: "serpapi"
+            - name: LLM_PROVIDER
+              value: "openai"
+            - name: TRENDS_GEO
+              value: "IN"
+            - name: TREND_QUALIFICATION_THRESHOLD
+              value: "0.70"
+            - name: LLM_PROBE_MAX_QUERIES
+              value: "4"
+            - name: LLM_REQUEST_TIMEOUT_SECONDS
+              value: "30"
+            - name: POSTGRES_URI
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-uri
+                  key: latest
+            - name: SERPAPI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: serpapi-key
+                  key: latest
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openai-key
+                  key: latest
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gemini-key
+                  key: latest
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: jwt-secret
+                  key: latest
