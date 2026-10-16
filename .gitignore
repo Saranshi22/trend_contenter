@@ -152,7 +152,10 @@ activemq-data/
 # Environments
 .env
 .envrc
-.venv
+.venv/
+backend/.venv/
+backend/content/*
+!backend/content/.gitkeep
 env/
 venv/
 ENV/
@@ -218,3 +221,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Frontend build & dependencies
+node_modules/
+dist/
+.env

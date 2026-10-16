@@ -28,8 +28,8 @@ COPY pyproject.toml poetry.lock* ./
 # Install project dependencies
 RUN poetry install --no-root --no-interaction --no-ansi
 
-# Install runtime LLM Brand Radar packages
-RUN pip install litellm anthropic textblob google-generativeai
+# Install runtime LLM Brand Radar and Content Studio packages
+RUN pip install --upgrade litellm anthropic textblob google-generativeai google-genai pillow
 
 # Copy application source code
 COPY . .

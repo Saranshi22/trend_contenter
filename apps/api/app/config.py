@@ -1,3 +1,4 @@
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -9,6 +10,13 @@ class Settings(BaseSettings):
     GEMINI_TEXT_MODEL: str = "gemini-1.5-pro"
     GEMINI_EMBEDDING_MODEL: str = "text-embedding-004"
     OPENAI_TEXT_MODEL: str = "gpt-4o-mini"
+
+    # Content Studio (image / video generation, editing, concepts)
+    GEMINI_IMAGE_MODEL: str = "gemini-3.1-pro-image"
+    GEMINI_IMAGE_EDIT_MODEL: str = "gemini-3.1-pro-image"
+    GEMINI_VIDEO_MODEL: str = "gemini-omni-1.1-flash"
+    VEO_MODEL: str = "veo-2.0-generate-001"
+    CONTENT_STUDIO_MEDIA_DIR: Path = Path(__file__).resolve().parent.parent / "media"
     
     MONGODB_URI: str = "mongodb://localhost:27017"
     MONGODB_DB: str = "trend_contenter"
@@ -32,6 +40,9 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "openai"
     OPENAI_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
+    GEMINI_BASE_URL: str = ""
+    LLM_GATEWAY_BASE_URL: str = ""
+    LLM_GATEWAY_TOKEN: str = ""
     ANTHROPIC_API_KEY: str = ""
     
     LLM_PROBE_MAX_QUERIES: int = 4

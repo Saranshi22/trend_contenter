@@ -183,3 +183,120 @@ export interface ProviderHealthSummary {
   total_count: number;
   headline: string;
 }
+
+// ==========================================
+// Content Studio Types (Gemini 3.1 & Veo 2)
+// ==========================================
+
+export interface ContentConceptItem {
+  id: string;
+  title: string;
+  media_type: 'image' | 'video';
+  target_platform: string;
+  platform_optimization_rationale: string;
+  concept_hook: string;
+  hook?: string;
+  visual_description: string;
+  generation_prompt: string;
+  image_prompt?: string;
+  video_prompt?: string;
+  aspect_ratio: string;
+  style_preset?: string;
+  camera_motion?: string;
+  duration_seconds?: number;
+  fps?: number;
+}
+
+export interface GenerateConceptsResponse {
+  brief_title: string;
+  brief_summary: string;
+  target_audience: string;
+  key_friction_points: string[];
+  concepts: ContentConceptItem[];
+  model_used: string;
+  is_demo: boolean;
+}
+
+export interface GeneratedImageItem {
+  id: string;
+  url: string;
+  image_base64: string;
+  enhanced_prompt?: string | null;
+  mime_type: string;
+  width?: number | null;
+  height?: number | null;
+}
+
+export interface GenerateImageResponse {
+  images: GeneratedImageItem[];
+  prompt: string;
+  enhanced_prompt?: string | null;
+  model_used: string;
+}
+
+export interface EditImageResponse {
+  images: GeneratedImageItem[];
+  operation: string;
+  original_image_url?: string | null;
+  message: string;
+  model_used: string;
+}
+
+export interface AddTextResponse {
+  image_url: string;
+  image_base64: string;
+  width: number;
+  height: number;
+}
+
+export interface GenerateVideoResponse {
+  id: string;
+  video_url: string;
+  video_uri?: string | null;
+  prompt: string;
+  enhanced_prompt?: string | null;
+  aspect_ratio: string;
+  duration_seconds: number;
+  fps: number;
+  model_used: string;
+  status: string;
+}
+
+export interface EnhancePromptResponse {
+  original_prompt: string;
+  enhanced_prompt: string;
+  keywords: string[];
+  suggested_styles: string[];
+}
+
+export interface AnalyzeImageResponse {
+  description: string;
+  detected_objects: string[];
+  background_type: string;
+  composition_notes: string;
+  edit_suggestions: string[];
+}
+
+export interface RecommendedImageItem {
+  id: string;
+  image_url: string;
+  thumbnail_url: string;
+  title: string;
+  snippet: string;
+  source_domain: string;
+  width?: number | null;
+  height?: number | null;
+  relevance_score: number;
+  aesthetic_score?: number | null;
+  context_score?: number | null;
+  overall_score: number;
+  reasoning?: string | null;
+  tags: string[];
+}
+
+export interface RecommendImagesResponse {
+  prompt: string;
+  total_candidates: number;
+  reranker_model: string;
+  recommendations: RecommendedImageItem[];
+}

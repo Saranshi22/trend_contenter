@@ -983,3 +983,97 @@ select.input-glass {
 .animate-fade-in {
   animation: fadeIn 0.25s ease-out forwards;
 }
+
+/* Content Studio Utilities */
+.studio-dropzone {
+  border: 2px dashed #CBD5E1;
+  border-radius: 10px;
+  padding: 24px;
+  text-align: center;
+  background: #F8FAFC;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.studio-dropzone:hover,
+.studio-dropzone.active {
+  border-color: var(--action-primary);
+  background: var(--action-subtle);
+}
+
+.style-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  background: #FFFFFF;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.style-chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  background: var(--surface-hover);
+}
+
+.style-chip.active {
+  border-color: var(--action-primary);
+  background: var(--action-subtle);
+  color: var(--action-primary);
+  font-weight: 600;
+}
+
+.prompt-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  background: var(--surface-secondary);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.prompt-tag:hover {
+  background: #FFFFFF;
+  border-color: var(--action-primary);
+  color: var(--action-primary);
+}
+
+.concept-card {
+  background: #FFFFFF;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.concept-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.media-preview-box {
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0F172A;
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
