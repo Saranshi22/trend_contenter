@@ -1,7 +1,7 @@
 # Trend Contenter 📡
 
 > **Autonomous Multi-Agent Content Intelligence Platform**  
-> Uncovering real-time search momentum, extracting multi-source audience evidence (Web, Reddit, YouTube, LLMs), isolating underserved market gaps, and producing scored editorial opportunity briefs with 1-click executive PDF exports.
+> Uncovering real-time search momentum, extracting multi-source audience evidence (SocialCrawl Social, Google News, YouTube, LLMs), isolating underserved market gaps, and producing scored editorial opportunity briefs with 1-click executive PDF exports.
 
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
@@ -37,7 +37,7 @@ Content teams frequently waste resources producing content that either arrives t
 **Trend Contenter** closes this gap by transforming raw search spikes into actionable, evidence-backed editorial blueprints:
 1. **Detects** real-time breakout search velocity via **SerpApi Google Trends**.
 2. **Qualifies** momentum using a multi-factor formula (velocity, acceleration, novelty).
-3. **Dispatches** an autonomous **LangGraph multi-agent research investigation** across 5 parallel evidence providers (Google Trends, Google News, Reddit, YouTube, AI answer engines).
+3. **Dispatches** an autonomous **LangGraph multi-agent research investigation** across 5 parallel evidence providers (Google Trends, Google News, SocialCrawl Social Listening, YouTube, AI answer engines).
 4. **Discovers** distinct ethnographic audience personas with concrete information needs, explicit questions, and friction points.
 5. **Isolates** content gaps where current web coverage or video tutorials fail the audience.
 6. **Produces** scored **Content Opportunity Briefs** complete with interactive evidence provenance and **1-click Executive PDF Export**.
@@ -56,7 +56,7 @@ flowchart TD
     subgraph LangGraph Pipeline
         C --> D[Agent 1: Research Planner]
         D --> E1[🌐 SerpApi Web & News]
-        D --> E2[💬 SerpApi Reddit Research]
+        D --> E2[💬 SocialCrawl Social Listening]
         D --> E3[📹 YouTube Data API v3]
         D --> E4[🤖 LLM Brand Radar Monitoring]
         
@@ -86,7 +86,7 @@ Trend Contenter integrates 5 distinct real-world evidence sources to triangulate
 | :--- | :--- | :--- |
 | **📡 Google Trends Radar** | SerpApi `google_trends_trending_now` | Detects hourly search spikes, regional breakout velocity, and query momentum. |
 | **📰 Google News & Web** | SerpApi `google` search | Captures existing publisher articles, domain authority, and editorial framing. |
-| **💬 Reddit Social Research** | SerpApi / Reddit Connector | Ingests real subreddit discussions, community sentiment, and unfiltered questions. |
+| **💬 SocialCrawl Social Listening** | SocialCrawl `search/multi` API | Ingests real public discussions, sentiment, unfiltered questions, and engagement across Reddit, X, TikTok, Threads, and Instagram. |
 | **📹 YouTube Data API v3** | Official YouTube v3 API | Analyzes video coverage, view counts, like ratios, and extracts questions from public comment threads. Quota-budgeted (~104 units/run) with 30-day retention compliance. |
 | **🤖 LLM Brand Radar** | OpenAI / Gemini Direct Adapters | Probes AI answer engines to assess consensus, divergence, and knowledge voids on trending topics. |
 
@@ -148,7 +148,7 @@ trend_contenter/
 │   │       │   ├── watchlists.py     # Custom trend watchlists
 │   │       │   └── admin.py          # Integration statuses & YouTube cleanup
 │   │       ├── integrations/         # External provider connectors
-│   │       │   ├── social/           # Reddit SerpApi connector
+│   │       │   ├── social/           # SocialCrawl multi-platform listening connector
 │   │       │   ├── web/              # Google News/Web SerpApi connector
 │   │       │   ├── video/            # YouTube Data API v3 connector
 │   │       │   └── llm_monitoring/   # Brand Radar AI monitoring engine
@@ -204,7 +204,10 @@ YOUTUBE_MAX_SEARCH_RESULTS=10
 YOUTUBE_MAX_COMMENT_VIDEOS=3
 YOUTUBE_MAX_COMMENTS_PER_VIDEO=20
 
-# SerpApi (Google Trends, Google News, Reddit Search)
+# SocialCrawl Cross-Platform Social Listening
+SOCIALCRAWL_API_KEY=your_socialcrawl_api_key_here
+
+# SerpApi (Google Trends, Google News)
 SERPAPI_API_KEY=your_serpapi_key_here
 TRENDS_PROVIDER=serpapi
 TRENDS_GEO=IN

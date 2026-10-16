@@ -9,7 +9,7 @@ import {
   IconLayers,
   IconFileText,
   IconClock,
-  IconReddit,
+  IconSocialCrawl,
   IconNews,
   IconYouTube,
   IconFilePdf,
@@ -134,9 +134,9 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
 
             {/* Source Status Badges */}
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              <span className={`metric-pill ${source_statuses?.social === 'success' ? 'metric-pill-green' : 'metric-pill-amber'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                <IconReddit size={14} />
-                <span>Reddit: {source_statuses?.social || 'Pending'}</span>
+              <span className={`metric-pill ${source_statuses?.social === 'success' ? 'metric-pill-green' : source_statuses?.social === 'not_configured' ? 'metric-pill-neutral' : 'metric-pill-amber'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <IconSocialCrawl size={14} />
+                <span>Social: {source_statuses?.social || 'Pending'}</span>
               </span>
               <span className={`metric-pill ${source_statuses?.web === 'success' ? 'metric-pill-green' : 'metric-pill-amber'}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
                 <IconNews size={14} />
@@ -572,7 +572,7 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
               </div>
               <div>
                 <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>2. Multi-Channel Evidence Harvested</div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Gathered and normalized {evidence?.length || 0} observations across Reddit, Google News, and AI assistants.</div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Gathered and normalized {evidence?.length || 0} observations across Social Listening, Google News, and AI assistants.</div>
               </div>
               <div>
                 <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>3. Deduplication &amp; Hashing Completed</div>
@@ -670,9 +670,9 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
                       </span>
                     )}
                     {inv.source_statuses.social && (
-                      <span className={`badge ${inv.source_statuses.social === 'degraded' ? 'badge-amber' : 'badge-cyan'}`} style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        <IconReddit size={12} />
-                        <span>Reddit: {inv.source_statuses.social}</span>
+                      <span className={`badge ${inv.source_statuses.social === 'degraded' || inv.source_statuses.social === 'failed' ? 'badge-amber' : 'badge-cyan'}`} style={{ fontSize: '0.7rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <IconSocialCrawl size={12} />
+                        <span>Social: {inv.source_statuses.social}</span>
                       </span>
                     )}
                     {inv.source_statuses.web && (

@@ -3,7 +3,7 @@ import type { TrendRadarItem, Opportunity, InvestigationSummary, ProviderHealthS
 import {
   IconTrendingUp,
   IconNews,
-  IconReddit,
+  IconSocialCrawl,
   IconYouTube,
   IconBot,
   IconArrowRight,
@@ -64,14 +64,14 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
       details: 'Live Google News & organic search verified'
     },
     {
-      id: 'reddit_social',
-      name: 'Reddit Social',
+      id: 'socialcrawl',
+      name: 'SocialCrawl Listening',
       provider_type: 'social',
       configured: true,
-      status: 'degraded',
-      label: 'Degraded • Fallback',
-      badge_class: 'badge-amber',
-      details: 'SerpApi site:reddit.com queries timing out; fallback engaged'
+      status: 'healthy',
+      label: 'Healthy • Live',
+      badge_class: 'badge-emerald',
+      details: 'Cross-platform social listening active (Reddit, X, TikTok, Threads, Instagram)'
     },
     {
       id: 'youtube_v3',
@@ -101,8 +101,10 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
         return <IconTrendingUp size={18} color="var(--brand-teal)" />;
       case 'google_news':
         return <IconNews size={18} color="var(--action-primary)" />;
+      case 'socialcrawl':
+        return <IconSocialCrawl size={18} color="var(--brand-teal)" />;
       case 'reddit_social':
-        return <IconReddit size={18} color="var(--warning-amber)" />;
+        return <IconSocialCrawl size={18} color="var(--warning-amber)" />;
       case 'youtube_v3':
         return <IconYouTube size={18} color="#EA4335" />;
       case 'llm_monitoring':

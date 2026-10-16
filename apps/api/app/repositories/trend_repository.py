@@ -110,6 +110,47 @@ class PostgresTrendRepository:
         await self.session.commit()
         return trend
 
+    def _row_to_snapshot(self, row: Any) -> TrendSnapshot:
+        tb = row.get("trend_breakdown")
+        if isinstance(tb, str):
+            try:
+                tb = json.loads(tb)
+            except Exception:
+                tb = []
+        elif not isinstance(tb, list):
+            tb = []
+
+        sl = row.get("source_links")
+        if isinstance(sl, str):
+            try:
+                sl = json.loads(sl)
+            except Exception:
+                sl = {}
+        elif not isinstance(sl, dict):
+            sl = {}
+
+        return TrendSnapshot(
+            trend_id=row["trend_id"],
+            topic=row["topic"],
+            canonical_topic=row.get("canonical_topic"),
+            region=row.get("region") or "IN",
+            category=row.get("category"),
+            active=bool(row.get("active", True)),
+            search_volume=row.get("search_volume"),
+            increase_percentage=row.get("increase_percentage"),
+            trend_breakdown=tb,
+            source_links=sl,
+            source=row.get("source_provider") or "serpapi_google_trends",
+            source_provider=row.get("source_provider") or "serpapi_google_trends",
+            start_timestamp=row.get("start_timestamp"),
+            end_timestamp=row.get("end_timestamp"),
+            observed_at=row.get("observed_at") or datetime.now(timezone.utc),
+            retrieved_at=row.get("retrieved_at"),
+            novelty_score=float(row.get("novelty_score") or 0.0),
+            qualification_score=float(row.get("qualification_score") or 0.0),
+            status=row.get("status") or "candidate"
+        )
+
     async def get_trends(
         self,
         region: Optional[str] = None,
@@ -131,51 +172,7 @@ class PostgresTrendRepository:
 
         result = await self.session.execute(text(query), params)
         rows = result.mappings().all()
-
-        snapshots: List[TrendSnapshot] = []
-        for row in rows:
-            tb = row.get("trend_breakdown")
-            if isinstance(tb, str):
-                try:
-                    tb = json.loads(tb)
-                except Exception:
-                    tb = []
-            elif not isinstance(tb, list):
-                tb = []
-
-            sl = row.get("source_links")
-            if isinstance(sl, str):
-                try:
-                    sl = json.loads(sl)
-                except Exception:
-                    sl = {}
-            elif not isinstance(sl, dict):
-                sl = {}
-
-            snapshots.append(
-                TrendSnapshot(
-                    trend_id=row["trend_id"],
-                    topic=row["topic"],
-                    canonical_topic=row.get("canonical_topic"),
-                    region=row.get("region") or "IN",
-                    category=row.get("category"),
-                    active=bool(row.get("active", True)),
-                    search_volume=row.get("search_volume"),
-                    increase_percentage=row.get("increase_percentage"),
-                    trend_breakdown=tb,
-                    source_links=sl,
-                    source=row.get("source_provider") or "serpapi_google_trends",
-                    source_provider=row.get("source_provider") or "serpapi_google_trends",
-                    start_timestamp=row.get("start_timestamp"),
-                    end_timestamp=row.get("end_timestamp"),
-                    observed_at=row.get("observed_at") or datetime.now(timezone.utc),
-                    retrieved_at=row.get("retrieved_at"),
-                    novelty_score=float(row.get("novelty_score") or 0.0),
-                    qualification_score=float(row.get("qualification_score") or 0.0),
-                    status=row.get("status") or "candidate"
-                )
-            )
-        return snapshots
+        return [self._row_to_snapshot(r) for r in rows]
 
     async def get_trend_by_id(self, trend_id: str) -> Optional[TrendSnapshot]:
         stmt = text("SELECT * FROM trends WHERE trend_id = :trend_id")
@@ -183,12 +180,7 @@ class PostgresTrendRepository:
         row = result.mappings().first()
         if not row:
             return None
-        trends = await self.get_trends(limit=1)
-        # Helper to construct snapshot
-        for t in await self.get_trends(limit=200):
-            if t.trend_id == trend_id:
-                return t
-        return None
+        return self._row_to_snapshot(row)
 
     async def get_observations(self, trend_id: str, limit: int = 50) -> List[Dict[str, Any]]:
         stmt = text("""

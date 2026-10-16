@@ -38,7 +38,7 @@ def test_evidence_normalization_and_provenance():
         text_excerpt=content,
         retrieved_at=datetime.now(timezone.utc),
         content_hash=content_hash,
-        metadata={"retrieved_by": "serpapi_reddit", "query": "multimodal agents", "is_inferred": False}
+        metadata={"retrieved_by": "socialcrawl", "query": "multimodal agents", "is_inferred": False}
     )
 
     assert item.content_hash == content_hash

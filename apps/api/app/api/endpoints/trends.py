@@ -280,43 +280,80 @@ async def get_provider_health(
             details="SERPAPI_API_KEY not configured"
         ))
 
-    # Provider 3: Reddit Social Research Connector (Truthful: Degraded fallback if unverified/timed out)
+    # Provider 3: SocialCrawl Cross-Platform Social Listening
+    has_socialcrawl = bool(settings.get_socialcrawl_api_key())
     social_run = source_statuses.get("social")
-    if social_run == "degraded" or not has_serpapi:
+    if not has_socialcrawl:
         providers.append(ProviderHealthItem(
-            id="reddit_social",
-            name="Reddit Social",
+            id="socialcrawl",
+            name="SocialCrawl Listening",
             provider_type="social",
-            configured=has_serpapi,
-            status="degraded",
-            label="Degraded • Fallback",
-            badge_class="badge-amber",
-            last_runtime_status="degraded",
-            details="SerpApi site:reddit.com search degraded; fallback synthetic threads active"
+            configured=False,
+            status="not_configured",
+            label="Not configured",
+            badge_class="badge-neutral",
+            last_runtime_status="missing_key",
+            details="SOCIALCRAWL_API_KEY not configured"
         ))
-    elif social_run == "failed":
+    elif social_run == "failed" or social_run == "auth_error":
         providers.append(ProviderHealthItem(
-            id="reddit_social",
-            name="Reddit Social",
+            id="socialcrawl",
+            name="SocialCrawl Listening",
             provider_type="social",
-            configured=has_serpapi,
+            configured=True,
             status="unavailable",
             label="Unavailable",
             badge_class="badge-amber",
             last_runtime_status="failed",
-            details="Social search execution failed"
+            details="SocialCrawl authentication or network execution failed"
+        ))
+    elif social_run == "credits_exhausted":
+        providers.append(ProviderHealthItem(
+            id="socialcrawl",
+            name="SocialCrawl Listening",
+            provider_type="social",
+            configured=True,
+            status="degraded",
+            label="Credits Exhausted",
+            badge_class="badge-amber",
+            last_runtime_status="credits_exhausted",
+            details="SocialCrawl monthly or prepaid credits depleted"
+        ))
+    elif social_run == "rate_limited":
+        providers.append(ProviderHealthItem(
+            id="socialcrawl",
+            name="SocialCrawl Listening",
+            provider_type="social",
+            configured=True,
+            status="degraded",
+            label="Rate Limited",
+            badge_class="badge-amber",
+            last_runtime_status="rate_limited",
+            details="SocialCrawl request rate limit exceeded"
+        ))
+    elif social_run == "partial":
+        providers.append(ProviderHealthItem(
+            id="socialcrawl",
+            name="SocialCrawl Listening",
+            provider_type="social",
+            configured=True,
+            status="degraded",
+            label="Partial Results",
+            badge_class="badge-amber",
+            last_runtime_status="partial",
+            details="Partial social coverage returned across requested platforms"
         ))
     else:
         providers.append(ProviderHealthItem(
-            id="reddit_social",
-            name="Reddit Social",
+            id="socialcrawl",
+            name="SocialCrawl Listening",
             provider_type="social",
-            configured=has_serpapi,
-            status="degraded",
-            label="Degraded • Fallback",
-            badge_class="badge-amber",
-            last_runtime_status="degraded",
-            details="SerpApi site:reddit.com queries timing out; fallback generator engaged"
+            configured=True,
+            status="healthy",
+            label="Healthy • Live",
+            badge_class="badge-emerald",
+            last_runtime_status="success",
+            details="Cross-platform social listening active (Reddit, X, TikTok, Threads, Instagram)"
         ))
 
     # Provider 4: YouTube Data API v3 (Official)

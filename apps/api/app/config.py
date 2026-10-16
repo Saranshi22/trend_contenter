@@ -44,8 +44,18 @@ class Settings(BaseSettings):
     LLM_MONITORING_BASE_URL: str = ""
     LLM_MONITORING_API_KEY: str = ""
     
-    SOCIAL_PROVIDER: str = ""
+    SOCIAL_PROVIDER: str = "socialcrawl"
     SOCIAL_API_KEY: str = ""
+    
+    SOCIALCRAWL_API_KEY: str = ""
+    SOCIALCRAWL_BASE_URL: str = "https://www.socialcrawl.dev/v1"
+    SOCIALCRAWL_PLATFORMS: str = "reddit,twitter,threads,tiktok,instagram"
+    SOCIALCRAWL_REQUEST_TIMEOUT_SECONDS: int = 20
+    SOCIALCRAWL_MAX_CREDITS_PER_RUN: int = 10
+    SOCIALCRAWL_CACHE_TTL_SECONDS: int = 300
+
+    def get_socialcrawl_api_key(self) -> str:
+        return (self.SOCIALCRAWL_API_KEY or self.SOCIAL_API_KEY or "").strip()
     
     WEB_SEARCH_PROVIDER: str = ""
     WEB_SEARCH_API_KEY: str = ""

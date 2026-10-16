@@ -220,12 +220,12 @@ async def list_integrations(
             details={"engine": "google_news"}
         ),
         IntegrationInfo(
-            integration_id="int_reddit_social",
-            name="Reddit Social Research Connector",
+            integration_id="int_socialcrawl",
+            name="SocialCrawl Multi-Platform Social Intelligence",
             provider_type="social",
-            status="active",
-            masked_key=_mask(settings.SERPAPI_API_KEY),
-            details={"platform": "reddit"}
+            status="active" if settings.get_socialcrawl_api_key() else "not_configured",
+            masked_key=_mask(settings.get_socialcrawl_api_key()),
+            details={"provider": "socialcrawl", "platforms": ["reddit", "twitter", "threads", "tiktok", "instagram"]}
         ),
         IntegrationInfo(
             integration_id="int_ai_monitoring",

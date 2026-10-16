@@ -4,37 +4,69 @@ from typing import Dict, Any, List
 
 from ..domain.models.evidence import EvidenceItem
 from ..agents.utils import deduplicate_evidence, generate_content_hash
-from ..integrations.social.serpapi_reddit import SerpApiRedditProvider
+from ..integrations.social.socialcrawl import (
+    SocialCrawlProvider,
+    SocialCrawlAuthError,
+    SocialCrawlCreditError,
+    SocialCrawlRateLimitError,
+    SocialCrawlTimeoutError,
+    SocialCrawlError
+)
 from ..integrations.web.serpapi_search import SerpApiWebSearchProvider
 from ..integrations.llm_monitoring.engine_monitor import EngineLLMMonitoringProvider
 from ..integrations.video.youtube_data_api import YouTubeDataApiProvider
 
 
 async def research_social(state: Dict[str, Any]) -> Dict[str, Any]:
-    """LangGraph node to collect social research evidence (Reddit discussions)."""
+    """LangGraph node to collect social research evidence across platforms via SocialCrawl."""
     topic = state.get("topic", "")
     plan = state.get("research_plan", {})
     queries = plan.get("social_queries", []) or [topic]
     inv_id = state.get("investigation_id", "")
+    region = state.get("region", "IN")
 
-    provider = SerpApiRedditProvider()
+    provider = SocialCrawlProvider()
     collected_evidence: List[Dict[str, Any]] = []
     source_status = "success"
     err_list = []
 
-    for q in queries[:3]:
+    if not provider.is_configured:
+        source_statuses = dict(state.get("source_statuses") or {})
+        source_statuses["social"] = "not_configured"
+        return {
+            "social_evidence": [],
+            "source_statuses": source_statuses,
+            "errors": state.get("errors", []) + [{"source": "social_research", "error": "SocialCrawl API key not configured"}]
+        }
+
+    # Bounded query execution: run primary search query (or up to 2 queries) to strictly control credits & latency
+    for q in queries[:2]:
         try:
-            items = await provider.search(q, region=state.get("region", "IN"), limit=5)
+            items = await provider.search(q, region=region, limit=10)
             for item in items:
                 item_dict = item.model_dump()
                 item_dict["investigation_id"] = inv_id
                 collected_evidence.append(item_dict)
-                # Truthfully record degraded state if mock fallback was returned
-                if item_dict.get("metadata", {}).get("fallback_mock") or item_dict.get("author") == "mock_user_123":
-                    source_status = "degraded"
+        except SocialCrawlCreditError as e:
+            source_status = "credits_exhausted"
+            err_list.append({"source": "social_research", "query": q, "error": str(e)})
+            break
+        except SocialCrawlRateLimitError as e:
+            source_status = "rate_limited"
+            err_list.append({"source": "social_research", "query": q, "error": str(e)})
+            break
+        except SocialCrawlAuthError as e:
+            source_status = "auth_error"
+            err_list.append({"source": "social_research", "query": q, "error": str(e)})
+            break
         except Exception as e:
             source_status = "failed"
             err_list.append({"source": "social_research", "query": q, "error": str(e)})
+
+    if collected_evidence and source_status in ("credits_exhausted", "rate_limited", "failed"):
+        source_status = "partial"
+    elif not collected_evidence and source_status == "success":
+        source_status = "no_results"
 
     # Preserve partial results
     source_statuses = dict(state.get("source_statuses") or {})
