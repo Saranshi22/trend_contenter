@@ -41,10 +41,19 @@ services:
       - SERPAPI_API_KEY=${SERPAPI_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_BASE_URL=${GEMINI_BASE_URL}
+      - LLM_GATEWAY_BASE_URL=${LLM_GATEWAY_BASE_URL}
+      - LLM_GATEWAY_TOKEN=${LLM_GATEWAY_TOKEN}
+      - GEMINI_IMAGE_MODEL=${GEMINI_IMAGE_MODEL:-gemini-3.1-pro-image}
+      - GEMINI_IMAGE_EDIT_MODEL=${GEMINI_IMAGE_EDIT_MODEL:-gemini-3.1-pro-image}
+      - GEMINI_VIDEO_MODEL=${GEMINI_VIDEO_MODEL:-gemini-omni-1.1-flash}
+      - VEO_MODEL=${VEO_MODEL:-veo-2.0-generate-001}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - JWT_SECRET=${JWT_SECRET:-supersecretkey_production}
     env_file:
       - .env
+    volumes:
+      - ./apps/api/app:/app/apps/api/app
 
   web:
     build:
@@ -58,6 +67,8 @@ services:
       - "5173:8080"
     environment:
       - PORT=8080
+    volumes:
+      - ./apps/web/dist:/usr/share/nginx/html
 
 volumes:
   pgdata:

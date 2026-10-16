@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from .endpoints import investigations, opportunities, trends, audiences, admin, watchlists
+from .endpoints import investigations, opportunities, trends, audiences, admin, watchlists, content_studio
 
 api_router = APIRouter()
 
@@ -10,3 +10,4 @@ api_router.include_router(audiences.router, prefix="/audiences", tags=["Audience
 api_router.include_router(trends.router, prefix="/trends", tags=["Trend Radar"])
 api_router.include_router(admin.router, prefix="/admin", tags=["Administration & RBAC"])
 api_router.include_router(watchlists.router, prefix="/watchlists", tags=["Watchlists"])
+api_router.include_router(content_studio.router, prefix="/content-studio", tags=["Content Studio"])
