@@ -202,7 +202,7 @@ async def get_provider_health(
             label="Healthy • Live",
             badge_class="badge-emerald",
             last_runtime_status="ingested",
-            details="Ingested via SerpApi google_trends_trending_now engine"
+            details="Discover emerging searches and rising interest."
         ))
     elif has_serpapi:
         providers.append(ProviderHealthItem(
@@ -211,10 +211,10 @@ async def get_provider_health(
             provider_type="trend_radar",
             configured=True,
             status="degraded",
-            label="Configured (Awaiting Ingestion)",
+            label="Awaiting Ingestion",
             badge_class="badge-amber",
             last_runtime_status="pending",
-            details="SerpApi configured; awaiting first poll"
+            details="Discover emerging searches and rising interest."
         ))
     else:
         providers.append(ProviderHealthItem(
@@ -226,7 +226,7 @@ async def get_provider_health(
             label="Not configured",
             badge_class="badge-neutral",
             last_runtime_status="missing_key",
-            details="SERPAPI_API_KEY not set in environment"
+            details="Discover emerging searches and rising interest."
         ))
 
     # Provider 2: Google News & Web Search (SerpApi)
@@ -241,9 +241,9 @@ async def get_provider_health(
             label="Healthy • Live",
             badge_class="badge-emerald",
             last_runtime_status="success",
-            details="Live Google News & organic search verified"
+            details="Follow news coverage and supporting web sources."
         ))
-    elif has_serpapi and web_run == "failed":
+    elif has_serpapi and web_run in ("failed", "auth_error", "error"):
         providers.append(ProviderHealthItem(
             id="google_news",
             name="Google News & Web",
@@ -252,20 +252,32 @@ async def get_provider_health(
             status="unavailable",
             label="Unavailable",
             badge_class="badge-amber",
-            last_runtime_status="failed",
-            details="Recent query failed; check SerpApi balance"
+            last_runtime_status=web_run,
+            details="Follow news coverage and supporting web sources."
         ))
-    elif has_serpapi:
+    elif has_serpapi and web_run == "degraded":
         providers.append(ProviderHealthItem(
             id="google_news",
             name="Google News & Web",
             provider_type="web_news",
             configured=True,
-            status="healthy",
-            label="Configured • Ready",
-            badge_class="badge-emerald",
-            last_runtime_status="ready",
-            details="SerpApi configured for web search"
+            status="degraded",
+            label="Degraded",
+            badge_class="badge-amber",
+            last_runtime_status="degraded",
+            details="Follow news coverage and supporting web sources."
+        ))
+    elif has_serpapi and not web_run:
+        providers.append(ProviderHealthItem(
+            id="google_news",
+            name="Google News & Web",
+            provider_type="web_news",
+            configured=True,
+            status="degraded",
+            label="Awaiting Verification",
+            badge_class="badge-amber",
+            last_runtime_status="unverified",
+            details="Follow news coverage and supporting web sources."
         ))
     else:
         providers.append(ProviderHealthItem(
@@ -277,193 +289,278 @@ async def get_provider_health(
             label="Not configured",
             badge_class="badge-neutral",
             last_runtime_status="missing_key",
-            details="SERPAPI_API_KEY not configured"
+            details="Follow news coverage and supporting web sources."
         ))
 
-    # Provider 3: SocialCrawl Cross-Platform Social Listening
+    # Provider 3: Reddit
     has_socialcrawl = bool(settings.get_socialcrawl_api_key())
     social_run = source_statuses.get("social")
     if not has_socialcrawl:
         providers.append(ProviderHealthItem(
             id="socialcrawl",
-            name="SocialCrawl Listening",
+            name="Reddit",
             provider_type="social",
             configured=False,
             status="not_configured",
             label="Not configured",
             badge_class="badge-neutral",
             last_runtime_status="missing_key",
-            details="SOCIALCRAWL_API_KEY not configured"
+            details="Explore public conversations, reactions, and audience questions."
         ))
-    elif social_run == "failed" or social_run == "auth_error":
+    elif social_run == "success":
         providers.append(ProviderHealthItem(
             id="socialcrawl",
-            name="SocialCrawl Listening",
+            name="Reddit",
+            provider_type="social",
+            configured=True,
+            status="healthy",
+            label="Healthy • Live",
+            badge_class="badge-emerald",
+            last_runtime_status="success",
+            details="Explore public conversations, reactions, and audience questions."
+        ))
+    elif social_run in ("failed", "auth_error"):
+        providers.append(ProviderHealthItem(
+            id="socialcrawl",
+            name="Reddit",
             provider_type="social",
             configured=True,
             status="unavailable",
             label="Unavailable",
             badge_class="badge-amber",
-            last_runtime_status="failed",
-            details="SocialCrawl authentication or network execution failed"
+            last_runtime_status=social_run,
+            details="Explore public conversations, reactions, and audience questions."
         ))
     elif social_run == "credits_exhausted":
         providers.append(ProviderHealthItem(
             id="socialcrawl",
-            name="SocialCrawl Listening",
+            name="Reddit",
             provider_type="social",
             configured=True,
             status="degraded",
-            label="Credits Exhausted",
+            label="Credits Depleted",
             badge_class="badge-amber",
             last_runtime_status="credits_exhausted",
-            details="SocialCrawl monthly or prepaid credits depleted"
+            details="Explore public conversations, reactions, and audience questions."
         ))
     elif social_run == "rate_limited":
         providers.append(ProviderHealthItem(
             id="socialcrawl",
-            name="SocialCrawl Listening",
+            name="Reddit",
             provider_type="social",
             configured=True,
             status="degraded",
             label="Rate Limited",
             badge_class="badge-amber",
             last_runtime_status="rate_limited",
-            details="SocialCrawl request rate limit exceeded"
+            details="Explore public conversations, reactions, and audience questions."
         ))
-    elif social_run == "partial":
+    elif social_run in ("degraded", "partial"):
         providers.append(ProviderHealthItem(
             id="socialcrawl",
-            name="SocialCrawl Listening",
+            name="Reddit",
             provider_type="social",
             configured=True,
             status="degraded",
-            label="Partial Results",
+            label="Degraded",
             badge_class="badge-amber",
-            last_runtime_status="partial",
-            details="Partial social coverage returned across requested platforms"
+            last_runtime_status=social_run,
+            details="Explore public conversations, reactions, and audience questions."
+        ))
+    elif not social_run:
+        providers.append(ProviderHealthItem(
+            id="socialcrawl",
+            name="Reddit",
+            provider_type="social",
+            configured=True,
+            status="degraded",
+            label="Awaiting Verification",
+            badge_class="badge-amber",
+            last_runtime_status="unverified",
+            details="Explore public conversations, reactions, and audience questions."
         ))
     else:
         providers.append(ProviderHealthItem(
             id="socialcrawl",
-            name="SocialCrawl Listening",
+            name="Reddit",
             provider_type="social",
             configured=True,
-            status="healthy",
-            label="Healthy • Live",
-            badge_class="badge-emerald",
-            last_runtime_status="success",
-            details="Cross-platform social listening active (Reddit, X, TikTok, Threads, Instagram)"
+            status="degraded",
+            label="Degraded",
+            badge_class="badge-amber",
+            last_runtime_status=str(social_run),
+            details="Explore public conversations, reactions, and audience questions."
         ))
 
-    # Provider 4: YouTube Data API v3 (Official)
+    # Provider 4: YouTube
     has_yt = bool(settings.get_youtube_api_key())
     yt_run = source_statuses.get("youtube")
-    if has_yt and yt_run == "success":
+    if not has_yt:
         providers.append(ProviderHealthItem(
             id="youtube_v3",
-            name="YouTube Data API v3",
+            name="YouTube",
+            provider_type="video",
+            configured=False,
+            status="not_configured",
+            label="Not configured",
+            badge_class="badge-neutral",
+            last_runtime_status="missing_key",
+            details="Discover trending videos and audience discussions."
+        ))
+    elif yt_run == "success":
+        providers.append(ProviderHealthItem(
+            id="youtube_v3",
+            name="YouTube",
             provider_type="video",
             configured=True,
             status="healthy",
             label="Healthy • Live",
             badge_class="badge-emerald",
             last_runtime_status="success",
-            details="YouTube Data API v3 verified with quota enforcement (105 units/run)"
+            details="Discover trending videos and audience discussions."
         ))
-    elif has_yt and (yt_run == "quota_exceeded" or yt_run == "failed"):
+    elif yt_run == "quota_exceeded":
         providers.append(ProviderHealthItem(
             id="youtube_v3",
-            name="YouTube Data API v3",
+            name="YouTube",
             provider_type="video",
             configured=True,
             status="degraded",
             label="Quota Exceeded",
             badge_class="badge-amber",
             last_runtime_status="quota_exceeded",
-            details="Daily YouTube API quota limit reached on Google Cloud project"
+            details="Discover trending videos and audience discussions."
         ))
-    elif has_yt:
+    elif yt_run in ("failed", "auth_error", "error"):
         providers.append(ProviderHealthItem(
             id="youtube_v3",
-            name="YouTube Data API v3",
+            name="YouTube",
             provider_type="video",
             configured=True,
-            status="healthy",
-            label="Healthy • Live",
-            badge_class="badge-emerald",
-            last_runtime_status="ready",
-            details="Official YouTube Data API v3 key active"
+            status="unavailable",
+            label="Unavailable",
+            badge_class="badge-amber",
+            last_runtime_status="failed",
+            details="Discover trending videos and audience discussions."
+        ))
+    elif yt_run == "degraded":
+        providers.append(ProviderHealthItem(
+            id="youtube_v3",
+            name="YouTube",
+            provider_type="video",
+            configured=True,
+            status="degraded",
+            label="Degraded",
+            badge_class="badge-amber",
+            last_runtime_status="degraded",
+            details="Discover trending videos and audience discussions."
+        ))
+    elif not yt_run:
+        providers.append(ProviderHealthItem(
+            id="youtube_v3",
+            name="YouTube",
+            provider_type="video",
+            configured=True,
+            status="degraded",
+            label="Awaiting Verification",
+            badge_class="badge-amber",
+            last_runtime_status="unverified",
+            details="Discover trending videos and audience discussions."
         ))
     else:
         providers.append(ProviderHealthItem(
             id="youtube_v3",
-            name="YouTube Data API v3",
+            name="YouTube",
             provider_type="video",
+            configured=True,
+            status="degraded",
+            label="Degraded",
+            badge_class="badge-amber",
+            last_runtime_status=str(yt_run),
+            details="Discover trending videos and audience discussions."
+        ))
+
+    # Provider 5: LLM Monitoring system
+    has_llm = bool(settings.OPENAI_API_KEY or settings.GEMINI_API_KEY)
+    llm_run = source_statuses.get("llm")
+    if not has_llm:
+        providers.append(ProviderHealthItem(
+            id="llm_monitoring",
+            name="LLM Monitoring system",
+            provider_type="llm_monitoring",
             configured=False,
             status="not_configured",
             label="Not configured",
             badge_class="badge-neutral",
             last_runtime_status="missing_key",
-            details="YOUTUBE_API_KEY not set"
+            details="Analyze how AI assistants respond to topics and brands."
         ))
-
-    # Provider 5: LLM Ecosystem Monitoring (OpenAI / Gemini)
-    has_llm = bool(settings.OPENAI_API_KEY or settings.GEMINI_API_KEY)
-    llm_run = source_statuses.get("llm")
-    if has_llm and llm_run == "success":
+    elif llm_run == "success":
         providers.append(ProviderHealthItem(
             id="llm_monitoring",
-            name=f"LLM Ecosystem ({settings.OPENAI_TEXT_MODEL or 'GPT-4o'})",
+            name="LLM Monitoring system",
             provider_type="llm_monitoring",
             configured=True,
             status="healthy",
             label="Healthy • Live",
             badge_class="badge-emerald",
             last_runtime_status="success",
-            details=f"Live model inference active ({settings.LLM_PROVIDER})"
+            details="Analyze how AI assistants respond to topics and brands."
         ))
-    elif has_llm and llm_run in ("failed", "quota_exceeded"):
+    elif llm_run in ("failed", "auth_error", "error"):
         providers.append(ProviderHealthItem(
             id="llm_monitoring",
-            name=f"LLM Ecosystem ({settings.OPENAI_TEXT_MODEL or 'GPT-4o'})",
+            name="LLM Monitoring system",
+            provider_type="llm_monitoring",
+            configured=True,
+            status="unavailable",
+            label="Unavailable",
+            badge_class="badge-amber",
+            last_runtime_status=llm_run,
+            details="Analyze how AI assistants respond to topics and brands."
+        ))
+    elif llm_run in ("degraded", "quota_exceeded", "rate_limited"):
+        providers.append(ProviderHealthItem(
+            id="llm_monitoring",
+            name="LLM Monitoring system",
             provider_type="llm_monitoring",
             configured=True,
             status="degraded",
             label="Degraded",
             badge_class="badge-amber",
             last_runtime_status=llm_run,
-            details="LLM model provider reported rate limits or quota depletion"
+            details="Analyze how AI assistants respond to topics and brands."
         ))
-    elif has_llm:
+    elif not llm_run:
         providers.append(ProviderHealthItem(
             id="llm_monitoring",
-            name=f"LLM Ecosystem ({settings.OPENAI_TEXT_MODEL or 'GPT-4o'})",
+            name="LLM Monitoring system",
             provider_type="llm_monitoring",
             configured=True,
-            status="healthy",
-            label="Healthy • Live",
-            badge_class="badge-emerald",
-            last_runtime_status="ready",
-            details=f"Configured with {settings.LLM_PROVIDER}"
+            status="degraded",
+            label="Awaiting Verification",
+            badge_class="badge-amber",
+            last_runtime_status="unverified",
+            details="Analyze how AI assistants respond to topics and brands."
         ))
     else:
         providers.append(ProviderHealthItem(
             id="llm_monitoring",
-            name="LLM Ecosystem",
+            name="LLM Monitoring system",
             provider_type="llm_monitoring",
-            configured=False,
-            status="not_configured",
-            label="Not configured",
-            badge_class="badge-neutral",
-            last_runtime_status="missing_key",
-            details="No OpenAI or Gemini API key provided"
+            configured=True,
+            status="degraded",
+            label="Degraded",
+            badge_class="badge-amber",
+            last_runtime_status=str(llm_run),
+            details="Analyze how AI assistants respond to topics and brands."
         ))
 
     healthy_count = sum(1 for p in providers if p.status == "healthy")
     all_healthy = (healthy_count == len(providers))
+    degraded_count = len(providers) - healthy_count
     headline = (
-        "All 5 Providers Operational" if all_healthy else f"{healthy_count} of {len(providers)} Providers Operational ({len(providers) - healthy_count} Degraded)"
+        "All 5 Providers Operational" if all_healthy else f"{healthy_count} of {len(providers)} Providers Operational ({degraded_count} Degraded)"
     )
 
     return ProviderHealthSummary(

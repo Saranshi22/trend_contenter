@@ -27,6 +27,7 @@ from .image_utils import (
     pil_to_base64,
     base64_to_pil
 )
+from .mock_data import generate_demo_canvas
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ class GeminiImageService:
                     response_mime_type="application/json"
                 )
             )
-            data = json.loads(response.text)
+            data = json.loads(response.text, strict=False)
             return EnhancePromptResponse(
                 original_prompt=req.prompt,
                 enhanced_prompt=data.get("enhanced_prompt", req.prompt),
@@ -312,7 +313,23 @@ class GeminiImageService:
 
         except Exception as e:
             logger.exception(f"Gemini image generation error: {e}")
-            raise RuntimeError(f"Image generation failed: {e}") from e
+            demo_pil = generate_demo_canvas(req.prompt, 1024, 1024, req.style_preset or "demo")
+            img_id, file_url = save_pil_image(demo_pil, prefix="demo_gen")
+            b64 = pil_to_base64(demo_pil)
+            return GenerateImageResponse(
+                images=[GeneratedImageItem(
+                    id=img_id,
+                    url=file_url,
+                    image_base64=b64,
+                    enhanced_prompt=f"[Demo Preview - {e}] {final_prompt}",
+                    mime_type="image/png",
+                    width=1024,
+                    height=1024
+                )],
+                prompt=req.prompt,
+                enhanced_prompt=f"Demo fallback due to: {str(e)}",
+                model_used=f"{model_name} (Demo Fallback)"
+            )
 
     def edit_image(self, req: EditImageRequest) -> EditImageResponse:
         """
@@ -560,7 +577,7 @@ class GeminiImageService:
                 )
             )
 
-            data = json.loads(response.text)
+            data = json.loads(response.text, strict=False)
             return AnalyzeImageResponse(
                 description=data.get("description", "Image analyzed with Gemini Vision"),
                 detected_objects=data.get("detected_objects", ["Main subject", "Background"]),

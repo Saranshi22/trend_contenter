@@ -50,6 +50,9 @@ export function App() {
   const [investigatingId, setInvestigatingId] = useState<string | null>(null);
   const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null);
   const [statusMsg, setStatusMsg] = useState<string>('');
+  const [lastTrendsUpdated, setLastTrendsUpdated] = useState<Date | null>(() => new Date());
+  const [trendsRefreshError, setTrendsRefreshError] = useState<string | null>(null);
+  const [selectedInvestigationId, setSelectedInvestigationId] = useState<string | null>(null);
 
   // Modals & Drawers
   const [selectedBrief, setSelectedBrief] = useState<Opportunity | null>(null);
@@ -65,6 +68,8 @@ export function App() {
       if (res.ok) {
         const data = await res.json();
         setTrends(data);
+        setLastTrendsUpdated(new Date());
+        setTrendsRefreshError(null);
       }
     } catch (err) {
       console.error('Failed to load trends:', err);
@@ -154,28 +159,47 @@ export function App() {
     fetchTrends(newRegion);
   };
 
-  // Polling Live Trends
+  // Refreshing Trends
   const handlePollTrends = async () => {
     setSyncing(true);
-    setStatusMsg(`Polling live trending searches via SerpApi for geo=${region}...`);
+    setTrendsRefreshError(null);
+    setStatusMsg(`Refreshing trending searches for region=${region}...`);
     try {
       const res = await fetch(`${API_BASE}/trends/poll?region=${region}&limit=20`, {
         method: 'POST'
       });
       if (res.ok) {
         const data = await res.json();
-        setStatusMsg(`Successfully ingested ${data.ingested_count} trends (${data.provider}).`);
-        await fetchTrends(region);
+        if (data.trends && Array.isArray(data.trends) && data.trends.length > 0) {
+          setTrends(data.trends);
+        } else {
+          await fetchTrends(region);
+        }
+        setLastTrendsUpdated(new Date());
+        setTrendsRefreshError(null);
+        setStatusMsg(`Successfully refreshed ${data.total_fetched || 20} trending topics (${data.qualified_count || 0} qualified for investigation).`);
       } else {
-        setStatusMsg('Polling trends returned non-200 response.');
+        const errText = `Refresh returned status ${res.status}. Preserving previously cached trends.`;
+        setTrendsRefreshError(errText);
+        setStatusMsg(errText);
       }
     } catch (err) {
-      setStatusMsg('Error communicating with backend trends API.');
+      const errText = 'Network error communicating with trends API. Preserving previously cached trends.';
+      setTrendsRefreshError(errText);
+      setStatusMsg(errText);
       console.error(err);
     } finally {
       setSyncing(false);
-      setTimeout(() => setStatusMsg(''), 5000);
+      setTimeout(() => setStatusMsg(''), 6000);
     }
+  };
+
+  // View Existing Investigation
+  const handleViewInvestigation = (invId?: string) => {
+    if (invId) {
+      setSelectedInvestigationId(invId);
+    }
+    setActivePage('investigations');
   };
 
   // Launch New Investigation
@@ -315,22 +339,29 @@ export function App() {
             opportunities={opportunities}
             investigations={investigations}
             providerHealth={providerHealth}
+            lastUpdated={lastTrendsUpdated}
             onNavigateToRadar={() => setActivePage('radar')}
             onNavigateToInvestigations={() => setActivePage('investigations')}
             onNavigateToOpportunities={() => setActivePage('audiences_opps')}
             onSelectBrief={setSelectedBrief}
             onDownloadPdf={handleDownloadPdf}
             onLaunchInvestigation={handleLaunchInvestigation}
+            onViewInvestigation={handleViewInvestigation}
           />
         )}
 
         {activePage === 'radar' && (
           <TrendRadarPage
             trends={trends}
+            investigations={investigations}
             region={region}
+            lastUpdated={lastTrendsUpdated}
+            refreshError={trendsRefreshError}
+            onClearRefreshError={() => setTrendsRefreshError(null)}
             onRegionChange={handleRegionChange}
             onPollTrends={handlePollTrends}
             onLaunchInvestigation={handleLaunchInvestigation}
+            onViewInvestigation={handleViewInvestigation}
             syncing={syncing}
             investigatingId={investigatingId}
           />
@@ -339,6 +370,8 @@ export function App() {
         {activePage === 'investigations' && (
           <InvestigationsPage
             investigations={investigations}
+            selectedInvestigationId={selectedInvestigationId}
+            onSelectInvestigationId={setSelectedInvestigationId}
             onRefresh={fetchInvestigations}
             onLaunchNew={(topic) => handleLaunchInvestigation(topic)}
             onSelectEvidence={(ev, label) => setSelectedEvidence({ item: ev, label })}

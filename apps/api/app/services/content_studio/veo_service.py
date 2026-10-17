@@ -14,6 +14,7 @@ from ...config import settings
 from .gemini_client import get_gemini_client
 from ...domain.models.content_studio import GenerateVideoRequest, GenerateVideoResponse
 from .image_utils import clean_base64_string
+from .mock_data import get_demo_video_url
 
 logger = logging.getLogger(__name__)
 
@@ -412,8 +413,21 @@ class VeoVideoService:
             )
 
         except Exception as e:
-            logger.exception(f"Veo video generation failed: {e}")
-            raise RuntimeError(f"Veo video generation failed: {e}") from e
+            logger.exception(f"Veo video generation failed: {e}. Providing demo preview fallback.")
+            sample_url = get_demo_video_url(req.prompt)
+
+            return GenerateVideoResponse(
+                id=video_id,
+                video_url=sample_url,
+                video_uri=f"demo://{sample_url}",
+                prompt=req.prompt,
+                enhanced_prompt=f"[Demo Preview - {e}] {final_prompt}",
+                aspect_ratio=req.aspect_ratio,
+                duration_seconds=req.duration_seconds,
+                fps=req.fps,
+                model_used=f"{model_name} (Demo Preview)",
+                status="completed_fallback"
+            )
 
 
 veo_service = VeoVideoService()

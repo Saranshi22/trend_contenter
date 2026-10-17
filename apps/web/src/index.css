@@ -269,6 +269,69 @@ a:hover {
   border-color: var(--border-strong);
 }
 
+/* KPI Metrics Cards */
+.kpi-card {
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
+  position: relative;
+  outline: none;
+}
+
+.kpi-card:hover {
+  box-shadow: var(--shadow-card-hover);
+  border-color: #CBD5E1;
+  transform: translateY(-2px);
+}
+
+.kpi-card:focus-visible {
+  border-color: var(--action-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
+.kpi-value {
+  font-size: 2.1rem;
+  font-weight: 700;
+  line-height: 1.1;
+  min-height: 38px;
+  display: flex;
+  align-items: baseline;
+}
+
+.kpi-supporting {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-top: 8px;
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.kpi-supporting-action {
+  font-size: 0.78rem;
+  color: var(--action-primary);
+  font-weight: 500;
+  margin-top: 8px;
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: gap 0.15s ease;
+}
+
+.kpi-card:hover .kpi-supporting-action {
+  gap: 6px;
+}
+
 /* Buttons */
 .btn-primary {
   background: var(--action-primary);
@@ -358,26 +421,21 @@ button:disabled,
 /* Provider Health Grid Utilities */
 .provider-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
 }
 
-@media (min-width: 1440px) {
+@media (max-width: 1120px) and (min-width: 720px) {
   .provider-grid {
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
-@media (max-width: 1439px) and (min-width: 960px) {
+@media (max-width: 719px) and (min-width: 480px) {
   .provider-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 959px) and (min-width: 600px) {
-  .provider-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-@media (max-width: 599px) {
+@media (max-width: 479px) {
   .provider-grid {
     grid-template-columns: 1fr;
   }
@@ -386,13 +444,12 @@ button:disabled,
 .provider-health-card {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   padding: 14px 16px;
   background: #FFFFFF;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   box-shadow: var(--shadow-sm);
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -404,10 +461,8 @@ button:disabled,
 
 .provider-card-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
+  align-items: center;
+  min-height: 42px;
 }
 
 .provider-name-group {
@@ -435,10 +490,16 @@ button:disabled,
   font-size: 0.88rem;
   font-weight: 600;
   color: var(--text-primary);
-  line-height: 1.3;
+  line-height: 1.25;
   word-break: normal;
   overflow: visible;
   white-space: normal;
+}
+
+.provider-badge-row {
+  display: flex;
+  align-items: center;
+  min-height: 22px;
 }
 
 .provider-status-badge {
@@ -446,13 +507,18 @@ button:disabled,
   padding: 2px 8px;
   flex-shrink: 0;
   white-space: nowrap;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
 }
 
 .provider-details-text {
-  font-size: 0.74rem;
-  color: var(--text-muted);
-  line-height: 1.4;
-  word-break: break-word;
+  font-size: 0.875rem; /* 14px */
+  color: #64748B;
+  line-height: 1.45;
+  word-break: normal;
 }
 
 /* Form Inputs & Enterprise Select Controls */
@@ -508,7 +574,7 @@ textarea.input-glass {
   cursor: not-allowed;
 }
 
-/* Custom Enterprise Select with Native Semantics */
+/* Custom Enterprise Select with Accessible Custom Dropdown Menu */
 .select-wrapper {
   position: relative;
   display: flex;
@@ -516,27 +582,53 @@ textarea.input-glass {
   width: 100%;
 }
 
-.select-glass,
-select.input-glass {
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
+button.select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-align: left;
+  width: 100%;
+  background: #FFFFFF;
+  border: 1px solid #D6DFEA;
+  color: #172033;
+  padding: 0 38px 0 14px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  height: 42px;
+  line-height: 40px;
   cursor: pointer;
-  padding-right: 38px;
-  background-color: #FFFFFF;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  user-select: none;
 }
 
-/* Standalone native select fallback chevron */
-select.input-glass {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 14px center;
-  background-size: 16px 16px;
+button.select-trigger:hover:not(:disabled) {
+  border-color: #BAC7D5;
 }
 
-/* Inside .select-wrapper, the React SVG chevron is displayed directly */
-.select-wrapper .select-glass {
-  background-image: none;
+button.select-trigger:focus,
+button.select-trigger.select-open {
+  outline: none;
+  border-color: var(--action-primary, #1A73E8);
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.15);
+}
+
+button.select-trigger:disabled {
+  background: var(--surface-secondary, #F1F5F9);
+  border-color: var(--border-subtle, #E2E8F0);
+  color: var(--text-muted, #94A3B8);
+  cursor: not-allowed;
+}
+
+.select-trigger-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  flex: 1 1 auto;
+  padding-right: 4px;
+  color: #172033;
 }
 
 .select-wrapper .select-chevron {
@@ -546,36 +638,171 @@ select.input-glass {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary);
-  transition: color 0.15s ease;
+  color: var(--text-secondary, #64748B);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.15s ease;
+}
+
+.select-wrapper .select-chevron.select-chevron-open {
+  transform: rotate(180deg);
+  color: var(--action-primary, #1A73E8);
 }
 
 .select-wrapper:hover .select-chevron {
   color: var(--text-primary);
 }
 
-.select-wrapper:focus-within .select-chevron {
-  color: var(--action-primary);
+/* Standalone native select fallback chevron for raw select elements */
+select.input-glass {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  cursor: pointer;
+  padding-right: 38px;
+  background-color: #FFFFFF;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 16px 16px;
 }
 
-/* Compact Select Variant for Table Cells and Dense Menus */
-.select-glass-sm {
-  height: 32px !important;
-  line-height: 30px !important;
-  padding: 0 26px 0 10px !important;
-  font-size: 0.8125rem !important;
-  border-radius: 6px !important;
+/* Compact Select Trigger Variant */
+button.select-trigger.select-glass-sm {
+  height: 30px;
+  line-height: 28px;
+  padding: 0 24px 0 8px;
+  font-size: 0.75rem;
+  border-radius: 6px;
 }
 
+.select-wrapper .select-chevron-sm,
 .select-wrapper-sm .select-chevron {
   right: 8px;
 }
 
-.input-glass option,
-.select-glass option {
+/* Custom Dropdown Menu (Portal) */
+.select-dropdown-menu {
   background: #FFFFFF;
-  color: var(--text-primary);
-  padding: 8px 12px;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.12), 0 8px 10px -6px rgba(15, 23, 42, 0.06);
+  padding: 4px;
+  max-height: 280px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  color: #172033;
+  font-family: inherit;
+  font-size: 0.875rem;
+  box-sizing: border-box;
+  animation: selectMenuFadeIn 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes selectMenuFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.select-dropdown-top {
+  animation-name: selectMenuFadeInTop;
+}
+
+@keyframes selectMenuFadeInTop {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.select-dropdown-menu::-webkit-scrollbar {
+  width: 6px;
+}
+
+.select-dropdown-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.select-dropdown-menu::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 3px;
+}
+
+.select-dropdown-menu::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Option Items */
+.select-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  min-height: 38px;
+  border-radius: 6px;
+  color: #172033;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.12s ease, color 0.12s ease;
+  box-sizing: border-box;
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+.select-dropdown-item .select-item-label {
+  flex: 1 1 auto;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.select-dropdown-item .select-item-check {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--action-primary, #1A73E8);
+}
+
+/* Hover & Keyboard Highlight */
+.select-dropdown-item:hover,
+.select-dropdown-item.select-item-highlighted {
+  background-color: #F8FAFC;
+  color: #172033;
+}
+
+/* Selected Option State */
+.select-dropdown-item.select-item-selected {
+  background-color: #E8F0FE;
+  color: #1A73E8;
+  font-weight: 500;
+}
+
+.select-dropdown-item.select-item-selected:hover,
+.select-dropdown-item.select-item-selected.select-item-highlighted {
+  background-color: #DDEAFC;
+  color: #1A73E8;
+}
+
+/* Disabled Option */
+.select-dropdown-item.select-item-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background-color: transparent;
+}
+
+/* Compact Dropdown Variant */
+.select-dropdown-sm .select-dropdown-item {
+  padding: 6px 10px;
+  min-height: 30px;
+  font-size: 0.8125rem;
 }
 
 /* Filter Bar Grid Layout */
@@ -602,6 +829,93 @@ select.input-glass {
   line-height: 1.2;
   margin: 0;
   white-space: nowrap;
+}
+
+/* Search input with inner icon and clear button */
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.search-input-wrapper .input-glass {
+  padding-left: 36px;
+  padding-right: 36px;
+}
+
+.search-input-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-muted, #94A3B8);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+}
+
+.search-clear-btn {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  color: var(--text-muted, #94A3B8);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 50%;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.search-clear-btn:hover {
+  color: var(--text-primary);
+  background-color: #E2E8F0;
+}
+
+/* Spinning Animation for Refresh Icon */
+@keyframes spinAnimation {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin-animation {
+  animation: spinAnimation 0.9s linear infinite;
+}
+
+/* Related Search Clickable Chip */
+.related-search-chip {
+  font-size: 0.72rem;
+  background: #FFFFFF;
+  border: 1px solid var(--border-subtle);
+  padding: 3px 8px;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  user-select: none;
+}
+
+.related-search-chip:hover {
+  background-color: var(--action-subtle, #E8F0FE);
+  border-color: #C2D7FA;
+  color: var(--action-primary, #1A73E8);
+}
+
+/* Scoring Info Popover */
+.scoring-info-popover {
+  position: absolute;
+  z-index: 1000;
+  background: #FFFFFF;
+  border: 1px solid var(--border-subtle, #E2E8F0);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.08);
+  padding: 14px 16px;
+  width: 320px;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  animation: selectMenuFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 

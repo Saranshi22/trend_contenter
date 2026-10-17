@@ -23,6 +23,8 @@ import {
 
 interface InvestigationsPageProps {
   investigations: InvestigationSummary[];
+  selectedInvestigationId?: string | null;
+  onSelectInvestigationId?: (id: string | null) => void;
   onRefresh: () => void;
   onLaunchNew: (topic: string) => void;
   onSelectEvidence: (ev: EvidenceDetail, label?: string) => void;
@@ -32,19 +34,34 @@ interface InvestigationsPageProps {
 
 export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
   investigations,
+  selectedInvestigationId,
+  onSelectInvestigationId,
   onRefresh,
   onLaunchNew,
   onSelectEvidence,
   onSelectOpportunity,
   onDownloadPdf
 }) => {
-  const [selectedInvId, setSelectedInvId] = useState<string | null>(null);
+  const [selectedInvId, setSelectedInvId] = useState<string | null>(selectedInvestigationId || null);
   const [reportDetail, setReportDetail] = useState<InvestigationDetail | null>(null);
   const [loadingReport, setLoadingReport] = useState<boolean>(false);
   const [activeReportTab, setActiveReportTab] = useState<'overview' | 'narratives' | 'ai_answers' | 'audiences' | 'gaps' | 'evidence' | 'timeline'>('overview');
   const [evidenceSearch, setEvidenceSearch] = useState('');
   const [customTopic, setCustomTopic] = useState('');
   const [retryingId, setRetryingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (selectedInvestigationId !== undefined) {
+      setSelectedInvId(selectedInvestigationId);
+    }
+  }, [selectedInvestigationId]);
+
+  const handleSelectInvestigation = (id: string | null) => {
+    setSelectedInvId(id);
+    if (onSelectInvestigationId) {
+      onSelectInvestigationId(id);
+    }
+  };
 
   // Fetch full report detail when an investigation is selected
   useEffect(() => {
@@ -101,7 +118,7 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
           <button 
             className="btn-outline" 
-            onClick={() => setSelectedInvId(null)}
+            onClick={() => handleSelectInvestigation(null)}
             style={{ fontSize: '0.85rem', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
             <IconArrowRight size={13} style={{ transform: 'rotate(180deg)' }} />
@@ -691,7 +708,7 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
                   <button 
                     className="btn-primary"
                     style={{ padding: '10px 18px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
-                    onClick={() => setSelectedInvId(inv.investigation_id)}
+                    onClick={() => handleSelectInvestigation(inv.investigation_id)}
                   >
                     <span>Open Intelligence Report</span>
                     <IconArrowRight size={13} />

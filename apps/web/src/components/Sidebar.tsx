@@ -10,6 +10,7 @@ import {
   IconAdmin,
   IconUser
 } from './Icons';
+import { Select } from './Select';
 
 export type NavPage = 
   | 'overview'
@@ -188,18 +189,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div style={{ fontSize: '0.68rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '4px' }}>
             Current Active Role
           </div>
-          <select
+          <Select
             value={currentRole}
             onChange={(e) => onChangeRole(e.target.value as UserRole)}
-            className="input-glass"
-            style={{ padding: '0 24px 0 8px', fontSize: '0.75rem', width: '100%', height: '30px', lineHeight: '28px', borderRadius: '6px', backgroundPosition: 'right 8px center', backgroundSize: '12px' }}
+            sizeVariant="sm"
+            aria-label="Current Active Role"
           >
             <option value="workspace_admin">Workspace Admin (Full)</option>
             <option value="research_analyst">Research Analyst</option>
             <option value="content_creator">Content Creator</option>
             <option value="editor">Editor</option>
             <option value="viewer">Viewer (Read Only)</option>
-          </select>
+          </Select>
         </div>
       </div>
     </aside>

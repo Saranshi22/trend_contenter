@@ -58,7 +58,14 @@ class RerankerService:
             )
         )
 
-        scores_list = json.loads(response.text)
+        raw_text = (response.text or "").strip()
+        if raw_text.startswith("```json"):
+            raw_text = raw_text[7:]
+        elif raw_text.startswith("```"):
+            raw_text = raw_text[3:]
+        if raw_text.endswith("```"):
+            raw_text = raw_text[:-3]
+        scores_list = json.loads(raw_text.strip(), strict=False)
         score_map = {item["index"]: item for item in scores_list if "index" in item}
 
         results: List[RecommendedImageItem] = []

@@ -59,9 +59,18 @@ OPPORTUNITY_ROW = {
 def isolated_env(tmp_path, monkeypatch):
     """No API key, media written to a temp dir, and default (admin) dev user."""
     monkeypatch.setattr(settings, "GEMINI_API_KEY", "")
+    monkeypatch.setattr(settings, "GEMINI_BASE_URL", "")
+    monkeypatch.setattr(settings, "LLM_GATEWAY_TOKEN", "")
+    monkeypatch.setattr(settings, "LLM_GATEWAY_BASE_URL", "")
+    monkeypatch.setenv("GEMINI_API_KEY", "")
+    monkeypatch.setenv("GEMINI_BASE_URL", "")
+    monkeypatch.setenv("LLM_GATEWAY_TOKEN", "")
+    monkeypatch.setenv("LLM_GATEWAY_BASE_URL", "")
     monkeypatch.setattr(settings, "CONTENT_STUDIO_MEDIA_DIR", tmp_path)
+    orig_overrides = dict(app.dependency_overrides)
     yield
     app.dependency_overrides.clear()
+    app.dependency_overrides.update(orig_overrides)
 
 
 @pytest.fixture

@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import type { TrendRadarItem, Opportunity, InvestigationSummary, ProviderHealthSummary } from '../types';
 import {
   IconTrendingUp,
   IconNews,
-  IconSocialCrawl,
+  IconReddit,
   IconYouTube,
   IconBot,
   IconArrowRight,
@@ -17,12 +17,14 @@ interface OverviewPageProps {
   opportunities: Opportunity[];
   investigations: InvestigationSummary[];
   providerHealth?: ProviderHealthSummary | null;
+  lastUpdated?: Date | null;
   onNavigateToRadar: () => void;
   onNavigateToInvestigations: () => void;
   onNavigateToOpportunities: () => void;
   onSelectBrief: (opp: Opportunity) => void;
   onDownloadPdf: (oppId: string) => void;
   onLaunchInvestigation: (topic: string, trendId?: string) => void;
+  onViewInvestigation?: (invId?: string) => void;
 }
 
 export const OverviewPage: React.FC<OverviewPageProps> = ({
@@ -30,16 +32,32 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
   opportunities,
   investigations,
   providerHealth,
+  lastUpdated,
   onNavigateToRadar,
   onNavigateToInvestigations,
   onNavigateToOpportunities,
   onSelectBrief,
   onDownloadPdf,
-  onLaunchInvestigation
+  onLaunchInvestigation,
+  onViewInvestigation
 }) => {
   const qualifiedTrends = trends.filter(t => t.internal_metrics.status === 'qualified');
   const completedInvestigations = investigations.filter(i => i.status === 'complete');
   const topOpportunities = opportunities.slice(0, 3);
+
+  const effectiveUpdatedTime = useMemo(() => {
+    if (lastUpdated) return lastUpdated;
+    if (trends.length === 0) return null;
+    const timestamps = trends
+      .map(t => new Date(t.retrieved_at || t.observed_at).getTime())
+      .filter(t => !isNaN(t));
+    return timestamps.length > 0 ? new Date(Math.max(...timestamps)) : null;
+  }, [lastUpdated, trends]);
+
+  const formattedUpdatedTime = useMemo(() => {
+    if (!effectiveUpdatedTime) return null;
+    return effectiveUpdatedTime.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  }, [effectiveUpdatedTime]);
 
   // Fallback providers if health endpoint hasn't responded yet
   const displayProviders = providerHealth?.providers || [
@@ -51,7 +69,7 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
       status: 'healthy',
       label: 'Healthy • Live',
       badge_class: 'badge-emerald',
-      details: 'Ingested via SerpApi google_trends_trending_now'
+      details: 'Discover emerging searches and rising interest.'
     },
     {
       id: 'google_news',
@@ -61,37 +79,37 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
       status: 'healthy',
       label: 'Healthy • Live',
       badge_class: 'badge-emerald',
-      details: 'Live Google News & organic search verified'
+      details: 'Follow news coverage and supporting web sources.'
     },
     {
       id: 'socialcrawl',
-      name: 'SocialCrawl Listening',
+      name: 'Reddit',
       provider_type: 'social',
       configured: true,
       status: 'healthy',
       label: 'Healthy • Live',
       badge_class: 'badge-emerald',
-      details: 'Cross-platform social listening active (Reddit, X, TikTok, Threads, Instagram)'
+      details: 'Explore public conversations, reactions, and audience questions.'
     },
     {
       id: 'youtube_v3',
-      name: 'YouTube Data API v3',
+      name: 'YouTube',
       provider_type: 'video',
       configured: true,
       status: 'healthy',
       label: 'Healthy • Live',
       badge_class: 'badge-emerald',
-      details: 'Verified with quota enforcement (105 units/run)'
+      details: 'Discover trending videos and audience discussions.'
     },
     {
       id: 'llm_monitoring',
-      name: 'LLM Ecosystem (gpt-4o-mini)',
+      name: 'LLM Monitoring system',
       provider_type: 'llm_monitoring',
       configured: true,
       status: 'healthy',
       label: 'Healthy • Live',
       badge_class: 'badge-emerald',
-      details: 'Live model inference active (openai)'
+      details: 'Analyze how AI assistants respond to topics and brands.'
     }
   ];
 
@@ -102,9 +120,10 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
       case 'google_news':
         return <IconNews size={18} color="var(--action-primary)" />;
       case 'socialcrawl':
-        return <IconSocialCrawl size={18} color="var(--brand-teal)" />;
+      case 'reddit':
       case 'reddit_social':
-        return <IconSocialCrawl size={18} color="var(--warning-amber)" />;
+        return <IconReddit size={18} color="#FF4500" />;
+      case 'youtube':
       case 'youtube_v3':
         return <IconYouTube size={18} color="#EA4335" />;
       case 'llm_monitoring':
@@ -128,45 +147,101 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
 
       {/* KPI Metrics Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '28px' }}>
-        <div className="glass-card" style={{ padding: '20px' }}>
+        {/* Card 1: Active Search Spikes */}
+        <div
+          className="kpi-card"
+          role="button"
+          tabIndex={0}
+          onClick={onNavigateToRadar}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onNavigateToRadar();
+            }
+          }}
+          title="View active Google Trends spikes in Trend Radar"
+          aria-label={`Active Search Spikes: ${trends.length}. Navigate to Trend Radar.`}
+        >
           <div className="subheading-label">Active Search Spikes</div>
-          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}>
+          <div className="kpi-value" style={{ color: 'var(--text-primary)' }}>
             {trends.length}
           </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--brand-teal)', marginTop: '8px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <IconTrendingUp size={14} color="var(--brand-teal)" />
-            <span>SerpApi Google Trends • Live</span>
+          <div className="kpi-supporting">
+            <span>{formattedUpdatedTime ? `Google Trends · Last updated ${formattedUpdatedTime}` : 'Google Trends'}</span>
           </div>
         </div>
 
-        <div className="glass-card" style={{ padding: '20px' }}>
-          <div className="subheading-label">Qualified Momentum</div>
-          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--status-success)', lineHeight: 1.1 }}>
+        {/* Card 2: High-Momentum Trends */}
+        <div
+          className="kpi-card"
+          role="button"
+          tabIndex={0}
+          onClick={onNavigateToRadar}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onNavigateToRadar();
+            }
+          }}
+          title="View trends meeting the 70% momentum qualification threshold"
+          aria-label={`High-Momentum Trends: ${qualifiedTrends.length}. Navigate to Trend Radar.`}
+        >
+          <div className="subheading-label">High-Momentum Trends</div>
+          <div className="kpi-value" style={{ color: 'var(--status-success)' }}>
             {qualifiedTrends.length}
           </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '8px' }}>
-            Momentum Threshold &gt; 70%
+          <div className="kpi-supporting">
+            <span>Momentum score above 70</span>
           </div>
         </div>
 
-        <div className="glass-card" style={{ padding: '20px', cursor: 'pointer' }} onClick={onNavigateToInvestigations}>
+        {/* Card 3: Completed Investigations */}
+        <div
+          className="kpi-card"
+          role="button"
+          tabIndex={0}
+          onClick={onNavigateToInvestigations}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onNavigateToInvestigations();
+            }
+          }}
+          title="View completed multi-source evidence investigations"
+          aria-label={`Completed Investigations: ${completedInvestigations.length}. Navigate to Investigations.`}
+        >
           <div className="subheading-label">Completed Investigations</div>
-          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1 }}>
+          <div className="kpi-value" style={{ color: 'var(--text-primary)' }}>
             {completedInvestigations.length}
           </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--action-primary)', marginTop: '8px', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span>LangGraph Multi-Agent Workflows</span>
+          <div className="kpi-supporting-action">
+            <span>View investigations</span>
             <IconArrowRight size={12} color="var(--action-primary)" />
           </div>
         </div>
 
-        <div className="glass-card" style={{ padding: '20px' }}>
-          <div className="subheading-label">Ranked Opportunities</div>
-          <div style={{ fontSize: '2rem', fontWeight: 700, color: 'var(--action-primary)', lineHeight: 1.1 }}>
+        {/* Card 4: Content Opportunities */}
+        <div
+          className="kpi-card"
+          role="button"
+          tabIndex={0}
+          onClick={onNavigateToOpportunities}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              onNavigateToOpportunities();
+            }
+          }}
+          title="Explore ranked editorial and content opportunities"
+          aria-label={`Content Opportunities: ${opportunities.length}. Navigate to Audience & Opportunities.`}
+        >
+          <div className="subheading-label">Content Opportunities</div>
+          <div className="kpi-value" style={{ color: 'var(--action-primary)' }}>
             {opportunities.length}
           </div>
-          <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '8px' }}>
-            Ready for Content Studio Export
+          <div className="kpi-supporting-action">
+            <span>Explore ranked opportunities</span>
+            <IconArrowRight size={12} color="var(--action-primary)" />
           </div>
         </div>
       </div>
@@ -206,6 +281,8 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
                   </div>
                   <div className="provider-name">{provider.name}</div>
                 </div>
+              </div>
+              <div className="provider-badge-row">
                 <span className={`badge ${provider.badge_class} provider-status-badge`}>
                   {provider.label}
                 </span>
@@ -242,6 +319,9 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
             {trends.slice(0, 4).map((item) => {
               const qualScore = Math.round(item.internal_metrics.qualification_score * 100);
               const isInvestigated = item.internal_metrics.status === 'investigated';
+              const matchingInv = investigations.find(
+                inv => (item.trend_id && inv.investigation_id === item.trend_id) || inv.topic.toLowerCase() === item.topic.toLowerCase()
+              );
 
               return (
                 <div
@@ -280,24 +360,50 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
                       <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>Qual Score</div>
                     </div>
                     {isInvestigated ? (
-                      <span
-                        className="badge badge-emerald"
-                        style={{
-                          fontSize: '0.74rem',
-                          padding: '4px 10px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '5px',
-                          textTransform: 'none',
-                          letterSpacing: 'normal',
-                          fontWeight: 500
-                        }}
-                      >
-                        <IconCheck size={12} color="var(--status-success)" />
-                        <span>Completed</span>
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span
+                          className="badge badge-emerald"
+                          style={{
+                            fontSize: '0.74rem',
+                            padding: '4px 8px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            textTransform: 'none',
+                            letterSpacing: 'normal',
+                            fontWeight: 500
+                          }}
+                        >
+                          <IconCheck size={12} color="var(--status-success)" />
+                          <span>Completed</span>
+                        </span>
+                        <button
+                          type="button"
+                          className="btn-outline"
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: '0.76rem',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            borderRadius: '6px'
+                          }}
+                          onClick={() => {
+                            if (onViewInvestigation) {
+                              onViewInvestigation(matchingInv?.investigation_id);
+                            } else {
+                              onNavigateToInvestigations();
+                            }
+                          }}
+                          title={`View investigation report for ${item.topic}`}
+                        >
+                          <span>View investigation</span>
+                          <IconArrowRight size={11} />
+                        </button>
+                      </div>
                     ) : (
                       <button
+                        type="button"
                         className="btn-primary"
                         style={{ padding: '6px 14px', fontSize: '0.78rem' }}
                         onClick={() => onLaunchInvestigation(item.topic, item.trend_id)}
