@@ -29,6 +29,13 @@ from ...domain.models.content_studio import (
     OpportunityConceptsRequest,
     RecommendImagesRequest,
     RecommendImagesResponse,
+    GenerateExperimentsRequest,
+    GenerateExperimentsResponse,
+    PublishFacebookRequest,
+    PublishInstagramRequest,
+    PublishEmailRequest,
+    PublishingStatusResponse,
+    PublishResult,
 )
 from ...domain.models.user import User
 from ...security.auth import require_permission
@@ -39,6 +46,8 @@ from ...services.content_studio.search_service import search_service
 from ...services.content_studio.reranker_service import reranker_service
 from ...services.content_studio.typography_service import TypographyService
 from ...services.content_studio.veo_service import veo_service
+from ...services.content_studio.experiment_service import experiment_service
+from ...services.content_studio.publisher_service import publisher_service
 from ...services.pdf_service import PDFService
 from .opportunities import _parse_dict, _parse_json_list
 
@@ -285,4 +294,58 @@ async def generate_video(req: GenerateVideoRequest, current_user: User = Depends
         return await run_in_threadpool(veo_service.generate_video, req)
     except Exception as e:
         raise _fail("/videos/generate", e)
+
+
+# ---------------------------------------------------------------------------
+# Content Experiments (Supply Chain Engine)
+# ---------------------------------------------------------------------------
+
+@router.post("/experiments/generate", response_model=GenerateExperimentsResponse, responses=HTTP_500_RESPONSE)
+async def generate_experiments(req: GenerateExperimentsRequest, current_user: User = Depends(require_write)):
+    """Generates 3 multi-channel campaign experiment variants (Trend Jacker, Value, Narrative) from a brief."""
+    try:
+        return await experiment_service.generate_experiments(req)
+    except Exception as e:
+        raise _fail("/experiments/generate", e)
+
+
+# ---------------------------------------------------------------------------
+# Omni-Channel Publishers (Facebook, Instagram, Email)
+# ---------------------------------------------------------------------------
+
+@router.get("/publish/status", response_model=PublishingStatusResponse, responses=HTTP_500_RESPONSE)
+async def get_publishing_status(current_user: User = Depends(require_read)):
+    """Checks credentials and configuration status across Facebook, Instagram, and SendGrid/SMTP."""
+    try:
+        return publisher_service.get_publishing_status()
+    except Exception as e:
+        raise _fail("/publish/status", e)
+
+
+@router.post("/publish/facebook", response_model=PublishResult, responses=HTTP_500_RESPONSE)
+async def publish_facebook(req: PublishFacebookRequest, current_user: User = Depends(require_write)):
+    """Publishes a visual post + caption to a Facebook Page."""
+    try:
+        return await run_in_threadpool(publisher_service.publish_facebook, req)
+    except Exception as e:
+        raise _fail("/publish/facebook", e)
+
+
+@router.post("/publish/instagram", response_model=PublishResult, responses=HTTP_500_RESPONSE)
+async def publish_instagram(req: PublishInstagramRequest, current_user: User = Depends(require_write)):
+    """Publishes a photo post + caption to Instagram Feed."""
+    try:
+        return await run_in_threadpool(publisher_service.publish_instagram, req)
+    except Exception as e:
+        raise _fail("/publish/instagram", e)
+
+
+@router.post("/publish/email", response_model=PublishResult, responses=HTTP_500_RESPONSE)
+async def publish_email(req: PublishEmailRequest, current_user: User = Depends(require_write)):
+    """Dispatches a campaign notification email via SendGrid SDK or SMTP relay with customizable styling."""
+    try:
+        return await run_in_threadpool(publisher_service.publish_email, req)
+    except Exception as e:
+        raise _fail("/publish/email", e)
+
 

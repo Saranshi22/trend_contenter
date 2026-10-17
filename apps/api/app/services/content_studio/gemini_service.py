@@ -162,13 +162,13 @@ class GeminiImageService:
 
             # Legacy Imagen support if explicitly requested
             if model_name.startswith("imagen-"):
-                config = types.GenerateImagesConfig(
-                    number_of_images=req.number_of_images,
-                    aspect_ratio=req.aspect_ratio if req.aspect_ratio in ["1:1", "3:4", "4:3", "9:16", "16:9"] else "1:1",
-                    negative_prompt=req.negative_prompt,
-                    person_generation=req.person_generation or "allow_adult",
-                    safety_filter_level=req.safety_filter_level or "block_medium_and_above"
-                )
+                config_kwargs = {
+                    "number_of_images": req.number_of_images,
+                    "aspect_ratio": req.aspect_ratio if req.aspect_ratio in ["1:1", "3:4", "4:3", "9:16", "16:9"] else "1:1"
+                }
+                if req.negative_prompt:
+                    config_kwargs["negative_prompt"] = req.negative_prompt
+                config = types.GenerateImagesConfig(**config_kwargs)
                 response = client.models.generate_images(
                     model=model_name,
                     prompt=final_prompt,
@@ -205,12 +205,6 @@ class GeminiImageService:
             # --- Gemini Multimodal Image Generation Pathway (gemini-3.1-pro-image, etc.) ---
             aspect_ratio = req.aspect_ratio if req.aspect_ratio in ["1:1", "2:3", "3:2", "3:4", "4:3", "9:16", "16:9", "21:9"] else "1:1"
             image_config_args = {"aspect_ratio": aspect_ratio}
-            if req.person_generation:
-                pg = req.person_generation.upper()
-                if pg in ["ALLOW_ALL", "ALLOW_ADULT", "ALLOW_NONE"]:
-                    image_config_args["person_generation"] = pg
-                elif pg == "DONT_ALLOW":
-                    image_config_args["person_generation"] = "ALLOW_NONE"
 
             # Safely create image_config only if supported by the installed google-genai version
             image_config = None
@@ -240,25 +234,19 @@ class GeminiImageService:
                         config=types.GenerateContentConfig(**config_kwargs)
                     )
                 except Exception as exc:
-                    if "response_modalities" in str(exc).lower() or "modality" in str(exc).lower() or "image_config" in str(exc).lower():
-                        fallback_kwargs = {"response_modalities": ["IMAGE"]}
-                        if image_config is not None:
-                            fallback_kwargs["image_config"] = image_config
-                        try:
-                            response = client.models.generate_content(
-                                model=model_name,
-                                contents=prompt_content,
-                                config=types.GenerateContentConfig(**fallback_kwargs)
-                            )
-                        except Exception:
-                            # Try without image_config if rejected
-                            response = client.models.generate_content(
-                                model=model_name,
-                                contents=prompt_content,
-                                config=types.GenerateContentConfig(response_modalities=["IMAGE"])
-                            )
-                    else:
-                        raise
+                    logger.warning(f"generate_content with image_config failed: {exc}. Trying fallback...")
+                    try:
+                        response = client.models.generate_content(
+                            model=model_name,
+                            contents=prompt_content,
+                            config=types.GenerateContentConfig(response_modalities=["IMAGE"])
+                        )
+                    except Exception as inner_exc:
+                        logger.warning(f"generate_content with response_modalities=['IMAGE'] failed: {inner_exc}. Trying default config...")
+                        response = client.models.generate_content(
+                            model=model_name,
+                            contents=prompt_content
+                        )
 
                 batch_items, batch_texts = self._extract_images_from_content_response(
                     response, prefix="gemini_gen", fallback_prompt=enhanced_text or final_prompt

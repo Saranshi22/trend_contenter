@@ -16,7 +16,7 @@ class GenerateImageRequest(BaseModel):
     aspect_ratio: str = Field("1:1", description="Aspect ratio: 1:1, 3:4, 4:3, 9:16, 16:9, 21:9")
     number_of_images: int = Field(1, ge=1, le=4, description="Number of images to generate")
     safety_filter_level: Optional[str] = Field("block_medium_and_above", description="Safety threshold")
-    person_generation: Optional[str] = Field("allow_adult", description="Person generation policy")
+    person_generation: Optional[str] = Field(None, description="Person generation policy")
     enhance_prompt: bool = Field(True, description="Automatically enhance prompt using Gemini")
     style_preset: Optional[str] = Field("none", description="Style preset: cinematic, photorealistic, anime, 3d, cyberpunk, minimalist")
     model: Optional[str] = Field(None, description="Optional Gemini image model (e.g. gemini-3.1-pro-image)")
@@ -112,7 +112,7 @@ class GenerateVideoRequest(BaseModel):
     aspect_ratio: str = Field("16:9", description="Aspect ratio: 16:9, 9:16, 1:1")
     duration_seconds: int = Field(5, ge=5, le=8, description="Duration in seconds (5-8)")
     fps: int = Field(24, description="Frame rate: 24 or 30")
-    person_generation: Optional[str] = Field("allow_adult", description="allow_adult, dont_allow, allow_all")
+    person_generation: Optional[str] = Field(None, description="allow_adult, dont_allow, allow_all")
     negative_prompt: Optional[str] = Field(None, description="Elements to avoid in video")
     enhance_prompt: bool = Field(True, description="Automatically enhance video prompt")
     model: Optional[str] = Field(None, description="Video model (default: gemini-omni-1.1-flash or veo-2.0-generate-001)")
@@ -226,6 +226,119 @@ class RecommendImagesResponse(BaseModel):
     total_candidates: int
     reranker_model: str
     recommendations: List[RecommendedImageItem]
+
+
+# ==========================================
+# Content Experiments & Campaign Supply Chain
+# ==========================================
+
+class ContentExperimentVariant(BaseModel):
+    id: str
+    variant_type: str = Field(..., description="trend_jacker, educational_solution, or emotive_narrative")
+    variant_label: str = Field(..., description="Human-readable label for variant")
+    title: str = Field(..., description="Working title for this variant")
+    hook: str = Field(..., description="Catchy opening hook / headline")
+    angle: str = Field(..., description="Editorial strategic angle")
+    instagram_copy: str = Field(..., description="Full Instagram caption with hashtags")
+    facebook_copy: str = Field(..., description="Facebook post copy with hashtags")
+    email_subject: str = Field(..., description="Email campaign subject line")
+    email_preview: str = Field(..., description="Email preview preheader")
+    email_body: str = Field(..., description="Email newsletter body content in markdown/plain text")
+    email_cta_text: str = Field("Explore Campaign", description="Email Call to Action button label")
+    email_cta_url: str = Field("https://trendcontenter.com/", description="Email CTA link URL")
+    visual_direction: str = Field(..., description="Visual styling and imagery description")
+    search_query: str = Field(..., description="Optimal search query to find recommended reference imagery")
+    veo_motion_prompt: str = Field(..., description="Cinematic motion prompt for Google Veo")
+    hashtags: List[str] = Field(default_factory=list)
+    audience_fit_score: float = Field(0.9, description="Audience persona fit score 0.0 - 1.0")
+
+class GenerateExperimentsRequest(BaseModel):
+    brief_text: Optional[str] = None
+    brief_file_base64: Optional[str] = None
+    brief_file_mime: Optional[str] = None
+    opportunity_id: Optional[str] = None
+    campaign_goal: Optional[str] = Field("engagement", description="awareness, engagement, product_launch, education")
+    target_audience: Optional[str] = None
+    brand_tone: Optional[str] = Field("dynamic", description="authoritative, playful, inspiring, urgent")
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+
+class GenerateExperimentsResponse(BaseModel):
+    campaign_title: str
+    campaign_summary: str
+    target_audience: str
+    core_friction_point: str
+    variants: List[ContentExperimentVariant]
+    model_used: str
+
+
+# ==========================================
+# Omni-Channel Publishers (Facebook, Instagram, Email)
+# ==========================================
+
+class PublishFacebookRequest(BaseModel):
+    image_url: str = Field(..., description="Public image URL or hosted asset URL to publish")
+    text: str = Field(..., min_length=1, description="Post caption/message")
+    hashtags: Optional[List[str]] = Field(default_factory=list)
+    page_id: Optional[str] = None
+    access_token: Optional[str] = None
+    gcs_bucket: Optional[str] = None
+    gcloud_service_key: Optional[str] = None
+
+class PublishInstagramRequest(BaseModel):
+    image_url: str = Field(..., description="Public image URL to publish to Instagram feed")
+    text: str = Field(..., min_length=1, max_length=2200, description="Instagram caption")
+    hashtags: Optional[List[str]] = Field(default_factory=list)
+    instagram_user_id: Optional[str] = None
+    access_token: Optional[str] = None
+    gcs_bucket: Optional[str] = None
+    gcloud_service_key: Optional[str] = None
+
+class EmailTemplateConfig(BaseModel):
+    theme: Optional[str] = Field("modern_blue", description="modern_blue, minimalist_dark, emerald_clean, sunset_amber")
+    brand_heading: Optional[str] = Field("TREND CONTENT", description="Header brand name")
+    brand_subtitle: Optional[str] = Field("Campaign Intelligence Notification", description="Header subtitle")
+    accent_color: Optional[str] = Field("#004B93", description="Primary accent color in hex")
+    primary_cta_text: Optional[str] = Field("Explore Campaign", description="Primary CTA button text")
+    primary_cta_url: Optional[str] = Field("https://trendcontenter.com/", description="Primary CTA target URL")
+    secondary_button_text: Optional[str] = None
+    secondary_button_url: Optional[str] = None
+    footer_text: Optional[str] = Field("You are receiving this intelligence notification from Trend Contenter.", description="Footer copyright/compliance")
+    include_hero_image: bool = Field(True, description="Whether to include hero image in email")
+
+class PublishEmailRequest(BaseModel):
+    to_emails: List[str] = Field(..., min_length=1, description="List of recipient email addresses")
+    subject: str = Field(..., min_length=1, max_length=998, description="Email subject line")
+    headline: Optional[str] = Field(None, description="Main email heading / title")
+    campaign_body: str = Field(..., description="Main email body content (supports markdown and paragraphs)")
+    image_url: Optional[str] = Field(None, description="Optional hero image URL to display/attach in email")
+    template_config: Optional[EmailTemplateConfig] = Field(default_factory=EmailTemplateConfig)
+    custom_html: Optional[str] = Field(None, description="Optional raw custom HTML override")
+    from_email: Optional[str] = None
+    reply_to: Optional[str] = None
+    sendgrid_api_key: Optional[str] = None
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+
+class ChannelStatus(BaseModel):
+    configured: bool
+    platform: str
+    details: Optional[str] = None
+
+class PublishingStatusResponse(BaseModel):
+    facebook: ChannelStatus
+    instagram: ChannelStatus
+    email: ChannelStatus
+
+class PublishResult(BaseModel):
+    platform: str
+    success: bool
+    post_id: Optional[str] = None
+    url: Optional[str] = None
+    message: str
+    details: Optional[Dict[str, Any]] = None
 
 
 
