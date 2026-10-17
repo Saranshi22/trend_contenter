@@ -15,18 +15,32 @@ from typing import Any
 
 import requests
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import (
-    Attachment,
-    ContentId,
-    Disposition,
-    Email,
-    FileContent,
-    FileName,
-    FileType,
-    Mail,
-    Personalization,
-)
+try:
+    from sendgrid import SendGridAPIClient
+    from sendgrid.helpers.mail import (
+        Attachment,
+        ContentId,
+        Disposition,
+        Email,
+        FileContent,
+        FileName,
+        FileType,
+        Mail,
+        Personalization,
+    )
+    HAVE_SENDGRID = True
+except ImportError:
+    SendGridAPIClient = None  # type: ignore
+    Attachment = None  # type: ignore
+    ContentId = None  # type: ignore
+    Disposition = None  # type: ignore
+    Email = None  # type: ignore
+    FileContent = None  # type: ignore
+    FileName = None  # type: ignore
+    FileType = None  # type: ignore
+    Mail = None  # type: ignore
+    Personalization = None  # type: ignore
+    HAVE_SENDGRID = False
 
 try:
     from .common import PublisherError, RETRYABLE_STATUS_CODES, RetryPolicy, load_image_bytes
@@ -539,6 +553,11 @@ def _build_smtp_mime_message(payload: EmailPublishInput, timeout_seconds: float)
 
 
 def _send_email_via_sendgrid(payload: EmailPublishInput, credentials: SendGridCredentials) -> dict[str, Any]:
+    if not HAVE_SENDGRID or SendGridAPIClient is None:
+        raise PublisherError(
+            "SendGrid SDK is not installed. Please install it via `poetry run pip install sendgrid`.",
+            is_retryable=False,
+        )
     client = SendGridAPIClient(credentials.api_key)
 
     resolved_text = payload.text or (
