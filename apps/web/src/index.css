@@ -1391,3 +1391,81 @@ button.select-trigger.select-glass-sm {
   justify-content: center;
   position: relative;
 }
+
+/* ============================================================== */
+/* Dynamic Cooking & Progress Animations (Content Studio UX)       */
+/* ============================================================== */
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(26, 115, 232, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(26, 115, 232, 0);
+  }
+}
+
+@keyframes indeterminateProgress {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(30%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.cooking-banner {
+  background: linear-gradient(135deg, #F0F7FF 0%, #E6F4EA 50%, #FFF8E1 100%);
+  border: 1.5px solid #1A73E8;
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 14px -2px rgba(26, 115, 232, 0.15);
+  position: relative;
+  overflow: hidden;
+}
+
+.cooking-banner::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #1A73E8, #0F9D9A, #188038, #F9AB00);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite linear;
+}
+
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #F1F5F9 25%, #E2E8F0 50%, #F1F5F9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+.skeleton-card {
+  border-radius: 10px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+}
+
+.pulsing-cook-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #1A73E8;
+  animation: pulseGlow 1.4s infinite;
+  display: inline-block;
+}
+

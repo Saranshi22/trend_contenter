@@ -18,7 +18,7 @@ import {
   IconFilePdf,
   IconClose,
   IconCheck,
-  IconVideo,
+  IconSparkles,
   IconLightning
 } from './components/Icons';
 
@@ -487,8 +487,8 @@ export function App() {
                 <div className="brief-label">Recommended Formats</div>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
                   <span className="metric-pill metric-pill-cyan" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                    <IconVideo size={14} />
-                    <span>{selectedBrief.recommended_format || 'Deep-Dive Video Script'}</span>
+                    <IconSparkles size={14} />
+                    <span>{selectedBrief.recommended_format || 'Visual Campaign Suite'}</span>
                   </span>
                   {selectedBrief.supported_formats && selectedBrief.supported_formats.map((fmt, i) => (
                     <span key={i} className="metric-pill metric-pill-green">

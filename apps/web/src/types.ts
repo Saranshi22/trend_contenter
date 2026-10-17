@@ -300,3 +300,100 @@ export interface RecommendImagesResponse {
   reranker_model: string;
   recommendations: RecommendedImageItem[];
 }
+
+export interface ContentExperimentVariant {
+  id: string;
+  variant_type: 'trend_jacker' | 'educational_solution' | 'emotive_narrative' | string;
+  variant_label: string;
+  title: string;
+  hook: string;
+  angle: string;
+  instagram_copy: string;
+  facebook_copy: string;
+  email_subject: string;
+  email_preview: string;
+  email_body: string;
+  email_cta_text: string;
+  email_cta_url: string;
+  visual_direction: string;
+  search_query: string;
+  veo_motion_prompt: string;
+  hashtags: string[];
+  audience_fit_score: number;
+}
+
+export interface GenerateExperimentsResponse {
+  campaign_title: string;
+  campaign_summary: string;
+  target_audience: string;
+  core_friction_point: string;
+  variants: ContentExperimentVariant[];
+  model_used: string;
+}
+
+export interface EmailTemplateConfig {
+  theme?: 'modern_blue' | 'minimalist_dark' | 'emerald_clean' | 'sunset_amber' | string;
+  brand_heading?: string;
+  brand_subtitle?: string;
+  accent_color?: string;
+  primary_cta_text?: string;
+  primary_cta_url?: string;
+  secondary_button_text?: string | null;
+  secondary_button_url?: string | null;
+  footer_text?: string;
+  include_hero_image?: boolean;
+}
+
+export interface PublishFacebookRequest {
+  image_url: string;
+  text: string;
+  hashtags?: string[];
+  page_id?: string;
+  access_token?: string;
+}
+
+export interface PublishInstagramRequest {
+  image_url: string;
+  text: string;
+  hashtags?: string[];
+  instagram_user_id?: string;
+  access_token?: string;
+}
+
+export interface PublishEmailRequest {
+  to_emails: string[];
+  subject: string;
+  headline?: string | null;
+  campaign_body: string;
+  image_url?: string | null;
+  template_config?: EmailTemplateConfig;
+  custom_html?: string | null;
+  from_email?: string | null;
+  reply_to?: string | null;
+  sendgrid_api_key?: string | null;
+  smtp_host?: string | null;
+  smtp_port?: number | null;
+  smtp_username?: string | null;
+  smtp_password?: string | null;
+}
+
+export interface ChannelStatus {
+  configured: boolean;
+  platform: string;
+  details?: string | null;
+}
+
+export interface PublishingStatusResponse {
+  facebook: ChannelStatus;
+  instagram: ChannelStatus;
+  email: ChannelStatus;
+}
+
+export interface PublishResult {
+  platform: string;
+  success: boolean;
+  post_id?: string | null;
+  url?: string | null;
+  message: string;
+  details?: any;
+}
