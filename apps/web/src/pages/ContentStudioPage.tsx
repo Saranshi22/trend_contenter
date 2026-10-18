@@ -12,7 +12,9 @@ import type {
   PublishingStatusResponse,
   PublishResult,
   CampaignDraft,
-  CampaignDraftSummary
+  CampaignDraftSummary,
+  GenerateArticleResponse,
+  ArticleSourceItem
 } from '../types';
 import { API_BASE } from '../apiConfig';
 import { campaignDraftStore, type SaveStatus } from '../services/campaignDraftStore';
@@ -51,7 +53,7 @@ interface ContentStudioPageProps {
 }
 
 type JourneyStage = 'brief' | 'concepts' | 'assets' | 'publish';
-type PublishChannel = 'instagram' | 'facebook' | 'email';
+type PublishChannel = 'instagram' | 'facebook' | 'email' | 'article';
 
 const EMAIL_THEMES: Record<string, { label: string; primary: string; bg: string; card: string; text: string }> = {
   modern_blue: { label: 'Modern Navy', primary: '#004B93', bg: '#F0F4F8', card: '#FFFFFF', text: '#222222' },
@@ -469,6 +471,24 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
   const [emailSecondaryBtnUrl, setEmailSecondaryBtnUrl] = useState<string>('');
   const [emailFooterText, setEmailFooterText] = useState<string>('You are receiving this intelligence campaign update from Trend Contenter.');
   const [emailPreviewMode, setEmailPreviewMode] = useState<'desktop' | 'mobile'>('desktop');
+
+  // Long-Form Editorial Article & Blog Studio State
+  const [articleTitle, setArticleTitle] = useState<string>('');
+  const [articleSubtitle, setArticleSubtitle] = useState<string>('');
+  const [articleMetaDescription, setArticleMetaDescription] = useState<string>('');
+  const [articleContent, setArticleContent] = useState<string>('');
+  const [articleTone, setArticleTone] = useState<'thought_leadership' | 'deep_dive' | 'how_to' | 'opinion' | 'journalistic'>('thought_leadership');
+  const [articleLength, setArticleLength] = useState<'short' | 'standard' | 'comprehensive'>('standard');
+  const [articleIncludeDb, setArticleIncludeDb] = useState<boolean>(true);
+  const [articleIncludeSearch, setArticleIncludeSearch] = useState<boolean>(true);
+  const [articleCustomInstructions, setArticleCustomInstructions] = useState<string>('');
+  const [articleReadingTime, setArticleReadingTime] = useState<number>(4);
+  const [articleTags, setArticleTags] = useState<string[]>([]);
+  const [articleOutline, setArticleOutline] = useState<string[]>([]);
+  const [articleKeyTakeaways, setArticleKeyTakeaways] = useState<string[]>([]);
+  const [articleSources, setArticleSources] = useState<ArticleSourceItem[]>([]);
+  const [isGeneratingArticle, setIsGeneratingArticle] = useState<boolean>(false);
+  const [articlePreviewTab, setArticlePreviewTab] = useState<'rendered' | 'raw'>('rendered');
 
   // Dynamic "Things Cooking" Experience State
   const [cookingState, setCookingState] = useState<{
@@ -927,6 +947,19 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
         if (draft.publish_data.smtpUsername) setSmtpUsername(draft.publish_data.smtpUsername);
       }
 
+      // Article Studio restoration
+      if (draft.article_data) {
+        if (draft.article_data.articleTitle !== undefined) setArticleTitle(draft.article_data.articleTitle);
+        if (draft.article_data.articleSubtitle !== undefined) setArticleSubtitle(draft.article_data.articleSubtitle);
+        if (draft.article_data.articleMetaDescription !== undefined) setArticleMetaDescription(draft.article_data.articleMetaDescription);
+        if (draft.article_data.articleContent !== undefined) setArticleContent(draft.article_data.articleContent);
+        if (draft.article_data.articleTone !== undefined) setArticleTone(draft.article_data.articleTone as any);
+        if (draft.article_data.articleLength !== undefined) setArticleLength(draft.article_data.articleLength as any);
+        if (draft.article_data.articleTags !== undefined) setArticleTags(draft.article_data.articleTags);
+        if (draft.article_data.articleSources !== undefined) setArticleSources(draft.article_data.articleSources);
+        if (draft.article_data.readingTimeMinutes !== undefined) setArticleReadingTime(draft.article_data.readingTimeMinutes);
+      }
+
       // Prerequisite validation before setting stage
       const safeStage = resolveSafeStage(
         (draft.current_stage as JourneyStage) || 'brief',
@@ -1373,6 +1406,17 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
         smtpHost,
         smtpPort,
         smtpUsername
+      },
+      article_data: {
+        articleTitle,
+        articleSubtitle,
+        articleMetaDescription,
+        articleContent,
+        articleTone,
+        articleLength,
+        articleTags,
+        articleSources,
+        readingTimeMinutes: articleReadingTime
       },
       ...overrides
     };
@@ -2420,6 +2464,212 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
     }
   };
 
+  // Auto-populate default article title when switching to article channel
+  useEffect(() => {
+    if (publishChannel === 'article' && !articleTitle) {
+      const defaultTitle = activeOpportunity?.title || activeConcept?.title || '';
+      if (defaultTitle) {
+        setArticleTitle(defaultTitle);
+      }
+    }
+  }, [publishChannel, activeOpportunity?.title, activeConcept?.title]);
+
+  // Generate Long-Form Editorial Article or Blog Post
+  const handleGenerateArticle = async () => {
+    const topicToUse = articleTitle.trim() || activeOpportunity?.title || activeConcept?.title || 'Industry Trend & Strategic Opportunity';
+    setIsGeneratingArticle(true);
+    startCooking('Synthesizing Long-Form Article', [
+      'Extracting opportunity dossier & audience gap intelligence from database...',
+      'Retrieving empirical evidence from Reddit, YouTube, and Google News...',
+      articleIncludeSearch ? 'Executing real-time web search for current trend context...' : 'Structuring editorial narrative & framework...',
+      'Synthesizing publication-ready long-form article with Gemini...'
+    ], '#00897B');
+
+    try {
+      const res = await fetch(`${API_BASE}/content-studio/article/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          opportunity_id: activeOpportunity?.opportunity_id,
+          concept_id: activeConcept?.id,
+          topic: topicToUse,
+          target_audience: targetAudienceInput || activeOpportunity?.audience_label,
+          tone: articleTone,
+          length: articleLength,
+          include_db_evidence: articleIncludeDb,
+          include_search_sources: articleIncludeSearch,
+          custom_instructions: articleCustomInstructions.trim() || undefined
+        })
+      });
+
+      if (res.ok) {
+        const data: GenerateArticleResponse = await res.json();
+        setArticleTitle(data.title);
+        setArticleSubtitle(data.subtitle);
+        setArticleMetaDescription(data.meta_description);
+        setArticleContent(data.content_markdown);
+        setArticleReadingTime(data.reading_time_minutes);
+        setArticleOutline(data.outline || []);
+        setArticleKeyTakeaways(data.key_takeaways || []);
+        setArticleTags(data.tags || []);
+        setArticleSources(data.sources_used || []);
+        completeCooking('Article Synthesized!');
+        notify(`Generated article: "${data.title.slice(0, 36)}..."`, 'success');
+      } else {
+        const err = await res.json().catch(() => ({ detail: 'Failed to generate article' }));
+        failCooking(err.detail || 'Failed to generate article');
+        notify(`Article generation failed: ${err.detail || 'Error'}`, 'error');
+      }
+    } catch (err) {
+      console.error('Error generating article:', err);
+      failCooking('Network error generating article');
+      notify('Network error generating article.', 'error');
+    } finally {
+      setIsGeneratingArticle(false);
+    }
+  };
+
+  // Download Article as Markdown File (.md)
+  const handleDownloadArticleMarkdown = () => {
+    if (!articleContent) {
+      notify('No article content to download.', 'error');
+      return;
+    }
+    const blob = new Blob([articleContent], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(articleTitle || 'article').toLowerCase().replace(/[^a-z0-9]+/g, '-')}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    notify('Downloaded article markdown file!', 'success');
+  };
+
+  // Editorial Markdown Visual Renderer Helper
+  const renderArticleMarkdown = (text: string) => {
+    if (!text) {
+      return (
+        <p style={{ fontStyle: 'italic', color: '#94A3B8', textAlign: 'center', padding: '40px 0' }}>
+          No content yet. Click "Generate Full Article with Gemini" on the left to synthesize an article from research and evidence.
+        </p>
+      );
+    }
+
+    const lines = text.split('\n');
+    const elements: React.ReactNode[] = [];
+    let inList = false;
+    let listItems: React.ReactNode[] = [];
+
+    const flushList = (keyPrefix: number) => {
+      if (inList && listItems.length > 0) {
+        elements.push(
+          <ul key={`list-${keyPrefix}`} style={{ paddingLeft: '22px', margin: '12px 0', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {listItems}
+          </ul>
+        );
+        listItems = [];
+        inList = false;
+      }
+    };
+
+    const formatInline = (str: string): React.ReactNode => {
+      const parts = str.split(/(\*\*.*?\*\*|\*.*?\*)/g);
+      return parts.map((part, i) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={i} style={{ color: '#0F172A', fontWeight: 700 }}>{part.slice(2, -2)}</strong>;
+        }
+        if (part.startsWith('*') && part.endsWith('*')) {
+          return <em key={i} style={{ color: '#334155' }}>{part.slice(1, -1)}</em>;
+        }
+        return part;
+      });
+    };
+
+    lines.forEach((line, idx) => {
+      const trimmed = line.trim();
+
+      if (!trimmed) {
+        flushList(idx);
+        return;
+      }
+
+      if (trimmed.startsWith('# ')) {
+        flushList(idx);
+        // H1 header handled by hero title above
+        return;
+      }
+
+      if (trimmed.startsWith('## ')) {
+        flushList(idx);
+        elements.push(
+          <h2 key={idx} style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0F172A', marginTop: '26px', marginBottom: '10px', borderBottom: '1px solid #F1F5F9', paddingBottom: '6px' }}>
+            {trimmed.slice(3)}
+          </h2>
+        );
+        return;
+      }
+
+      if (trimmed.startsWith('### ')) {
+        flushList(idx);
+        elements.push(
+          <h3 key={idx} style={{ fontSize: '1.05rem', fontWeight: 700, color: '#1E293B', marginTop: '18px', marginBottom: '8px' }}>
+            {trimmed.slice(4)}
+          </h3>
+        );
+        return;
+      }
+
+      if (trimmed.startsWith('> ')) {
+        flushList(idx);
+        elements.push(
+          <blockquote key={idx} style={{
+            margin: '16px 0',
+            padding: '12px 18px',
+            borderLeft: '4px solid #00897B',
+            background: '#F0FDF4',
+            borderRadius: '0 8px 8px 0',
+            color: '#064E3B',
+            fontSize: '0.90rem',
+            fontStyle: 'italic',
+            lineHeight: 1.55
+          }}>
+            {formatInline(trimmed.slice(2))}
+          </blockquote>
+        );
+        return;
+      }
+
+      if (trimmed.startsWith('- ') || trimmed.startsWith('* ') || /^\d+\.\s/.test(trimmed)) {
+        inList = true;
+        const bulletContent = trimmed.replace(/^[-*]\s+|\d+\.\s+/, '');
+        listItems.push(
+          <li key={idx} style={{ lineHeight: 1.6, fontSize: '0.92rem' }}>
+            {formatInline(bulletContent)}
+          </li>
+        );
+        return;
+      }
+
+      if (trimmed === '---' || trimmed === '***') {
+        flushList(idx);
+        elements.push(<hr key={idx} style={{ margin: '22px 0', border: 'none', borderTop: '1px solid #E2E8F0' }} />);
+        return;
+      }
+
+      flushList(idx);
+      elements.push(
+        <p key={idx} style={{ margin: '12px 0', lineHeight: 1.7, fontSize: '0.92rem' }}>
+          {formatInline(trimmed)}
+        </p>
+      );
+    });
+
+    flushList(lines.length);
+    return elements;
+  };
+
   const selectedPalette = EMAIL_THEMES[emailTheme] || EMAIL_THEMES.modern_blue;
 
   // Stage 1 Ingestion Helpers & Readiness Calculations
@@ -2753,9 +3003,11 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
               title: 'Publish & Channels', 
               desc: !heroAsset || heroAssetLoadFailed
                 ? 'Active Asset Required'
-                : publishingStatus?.[publishChannel]?.configured
-                  ? `${publishChannel === 'facebook' ? 'Facebook' : publishChannel === 'instagram' ? 'Instagram' : 'Email'} Ready`
-                  : 'Configure Channel & Copy'
+                : publishChannel === 'article'
+                  ? 'Article & Blog Studio'
+                  : publishingStatus?.[publishChannel]?.configured
+                    ? `${publishChannel === 'facebook' ? 'Facebook' : publishChannel === 'instagram' ? 'Instagram' : 'Email'} Ready`
+                    : 'Configure Channel & Copy'
             }
           ].map((step) => {
             const isActive = currentStage === step.id;
@@ -6027,6 +6279,14 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                 <IconMail size={16} color="#004B93" />
                 <span>Email Campaign &amp; Template Studio</span>
               </button>
+              <button
+                className={`tab-btn ${publishChannel === 'article' ? 'active' : ''}`}
+                onClick={() => setPublishChannel('article')}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+              >
+                <IconFileText size={16} color="#00897B" />
+                <span>Editorial Article &amp; Blog</span>
+              </button>
             </div>
           </div>
 
@@ -7122,6 +7382,401 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                       <div style={{ marginTop: '4px', opacity: 0.8 }}>&copy; Trend Contenter Studio</div>
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* CHANNEL 4: EDITORIAL ARTICLE & BLOG STUDIO */}
+          {publishChannel === 'article' && (
+            <div className="grid-2 animate-fade-in" style={{ gap: '24px', alignItems: 'flex-start' }}>
+              {/* Left Column: Intelligence Synthesis Controls & Full Markdown Editor */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {/* Generation & Synthesis Configuration Card */}
+                <div className="glass-card" style={{ padding: '20px', border: '1.5px solid #00897B' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                        <span className="badge badge-emerald" style={{ fontSize: '0.72rem', fontWeight: 700 }}>
+                          Research Intelligence Synthesis
+                        </span>
+                        <span style={{ fontSize: '0.80rem', color: '#00897B', fontWeight: 600 }}>
+                          Evidence-Backed Long-Form
+                        </span>
+                      </div>
+                      <h4 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                        Generate Strategic Article / Blog Post
+                      </h4>
+                      <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '4px 0 0 0', lineHeight: 1.4 }}>
+                        Synthesize verified opportunity dossiers, audience friction gaps, and empirical Reddit/YouTube/News evidence into a publication-ready long-form article.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Options Grid: Tone & Length */}
+                  <div className="grid-2" style={{ gap: '12px', marginBottom: '14px' }}>
+                    <div>
+                      <label className="subheading-label">Editorial Tone &amp; Style</label>
+                      <select
+                        className="select-glass"
+                        style={{ width: '100%', fontSize: '0.82rem', padding: '8px 12px' }}
+                        value={articleTone}
+                        onChange={(e: any) => setArticleTone(e.target.value)}
+                      >
+                        <option value="thought_leadership">Thought Leadership &amp; Strategic Analysis</option>
+                        <option value="deep_dive">Exhaustive Empirical Deep-Dive</option>
+                        <option value="how_to">Actionable Explainer &amp; Playbook</option>
+                        <option value="opinion">Bold Opinion &amp; Counter-Intuitive View</option>
+                        <option value="journalistic">Investigative Journalistic Report</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="subheading-label">Target Depth &amp; Length</label>
+                      <select
+                        className="select-glass"
+                        style={{ width: '100%', fontSize: '0.82rem', padding: '8px 12px' }}
+                        value={articleLength}
+                        onChange={(e: any) => setArticleLength(e.target.value)}
+                      >
+                        <option value="short">Concise Blog Post (~700 words • 3 min read)</option>
+                        <option value="standard">Standard In-Depth Article (~1,300 words • 6 min read)</option>
+                        <option value="comprehensive">Comprehensive Research Dossier (~2,000 words • 9 min read)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Intelligence Toggles */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px 14px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0', marginBottom: '14px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0, fontSize: '0.82rem', fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        checked={articleIncludeDb}
+                        onChange={(e) => setArticleIncludeDb(e.target.checked)}
+                        style={{ width: '15px', height: '15px' }}
+                      />
+                      <span>Incorporate DB Evidence (Audience Questions, Content Gaps, Community Excerpts)</span>
+                    </label>
+
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0, fontSize: '0.82rem', fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        checked={articleIncludeSearch}
+                        onChange={(e) => setArticleIncludeSearch(e.target.checked)}
+                        style={{ width: '15px', height: '15px' }}
+                      />
+                      <span>Incorporate Real-Time Web Search Sources (Google Search / Live Index)</span>
+                    </label>
+                  </div>
+
+                  {/* Optional Custom Angle / Prompt */}
+                  <div style={{ marginBottom: '14px' }}>
+                    <label className="subheading-label">Custom Editorial Angle / Directives (Optional)</label>
+                    <input
+                      type="text"
+                      className="input-glass"
+                      placeholder="e.g. Focus on ROI implications for B2B tech leaders, cite real community skepticism..."
+                      value={articleCustomInstructions}
+                      onChange={(e) => setArticleCustomInstructions(e.target.value)}
+                      style={{ fontSize: '0.82rem' }}
+                    />
+                  </div>
+
+                  {/* Generate Button */}
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    style={{
+                      width: '100%',
+                      padding: '12px 20px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      background: 'linear-gradient(135deg, #00897B, #004D40)',
+                      boxShadow: '0 4px 14px rgba(0, 137, 123, 0.35)',
+                      fontWeight: 700,
+                      fontSize: '0.92rem'
+                    }}
+                    onClick={handleGenerateArticle}
+                    disabled={isGeneratingArticle}
+                  >
+                    <IconSparkles size={16} className={isGeneratingArticle ? 'rotating-spinner' : ''} />
+                    <span>{isGeneratingArticle ? 'Synthesizing Article from Evidence...' : 'Generate Full Article with Gemini'}</span>
+                  </button>
+                </div>
+
+                {/* Editorial Editor Card */}
+                <div className="glass-card" style={{ padding: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                    <label className="subheading-label" style={{ fontSize: '0.88rem', margin: 0 }}>
+                      Interactive Article Editor &amp; SEO Metadata
+                    </label>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        type="button"
+                        className="btn-outline"
+                        style={{ padding: '4px 10px', fontSize: '0.74rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        onClick={() => copyToClipboard(articleContent, 'Article Markdown')}
+                      >
+                        <IconCopy size={12} />
+                        <span>Copy Markdown</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-outline"
+                        style={{ padding: '4px 10px', fontSize: '0.74rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        onClick={handleDownloadArticleMarkdown}
+                      >
+                        <IconDownload size={12} />
+                        <span>Download .md</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <div>
+                      <label className="subheading-label">Headline / Title</label>
+                      <input
+                        type="text"
+                        className="input-glass"
+                        value={articleTitle}
+                        onChange={(e) => setArticleTitle(e.target.value)}
+                        placeholder="Article Headline..."
+                        style={{ fontSize: '0.95rem', fontWeight: 600 }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="subheading-label">Subtitle / Deck</label>
+                      <input
+                        type="text"
+                        className="input-glass"
+                        value={articleSubtitle}
+                        onChange={(e) => setArticleSubtitle(e.target.value)}
+                        placeholder="Article Subtitle..."
+                        style={{ fontSize: '0.85rem' }}
+                      />
+                    </div>
+
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <label className="subheading-label">SEO Meta Description</label>
+                        <span style={{ fontSize: '0.70rem', color: articleMetaDescription.length > 160 ? '#DC2626' : 'var(--text-muted)' }}>
+                          {articleMetaDescription.length} / 160 chars
+                        </span>
+                      </div>
+                      <textarea
+                        className="input-glass"
+                        rows={2}
+                        value={articleMetaDescription}
+                        onChange={(e) => setArticleMetaDescription(e.target.value)}
+                        placeholder="Google Search Snippet (150-160 characters)..."
+                        style={{ fontSize: '0.80rem' }}
+                      />
+                    </div>
+
+                    {/* Markdown Body Textarea */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <label className="subheading-label">Article Body (Markdown)</label>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          {articleContent.trim() ? articleContent.trim().split(/\s+/).length : 0} words &bull; ~{articleReadingTime} min read
+                        </span>
+                      </div>
+                      <textarea
+                        className="input-glass"
+                        rows={16}
+                        value={articleContent}
+                        onChange={(e) => setArticleContent(e.target.value)}
+                        placeholder="# Enter your article title&#10;&#10;Write or click 'Generate Full Article' above to compose automatically..."
+                        style={{ fontFamily: 'monospace', fontSize: '0.84rem', lineHeight: 1.5 }}
+                      />
+                    </div>
+
+                    {/* Active Tags */}
+                    {articleTags.length > 0 && (
+                      <div>
+                        <label className="subheading-label">SEO Topic Tags</label>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {articleTags.map((tag, idx) => (
+                            <span key={idx} className="metric-pill metric-pill-cyan" style={{ fontSize: '0.74rem' }}>
+                              #{tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Live Editorial Preview */}
+              <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <IconFileText size={18} color="#00897B" />
+                    <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>Editorial Reading Preview</span>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <button
+                      type="button"
+                      className={articlePreviewTab === 'rendered' ? 'btn-primary' : 'btn-outline'}
+                      style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                      onClick={() => setArticlePreviewTab('rendered')}
+                    >
+                      Article Layout
+                    </button>
+                    <button
+                      type="button"
+                      className={articlePreviewTab === 'raw' ? 'btn-primary' : 'btn-outline'}
+                      style={{ padding: '4px 10px', fontSize: '0.75rem' }}
+                      onClick={() => setArticlePreviewTab('raw')}
+                    >
+                      Raw Markdown
+                    </button>
+                  </div>
+                </div>
+
+                {/* Article Card View */}
+                <div style={{
+                  background: '#FFFFFF',
+                  borderRadius: '12px',
+                  border: '1px solid #E2E8F0',
+                  padding: '28px',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+                  minHeight: '600px',
+                  display: 'flex',
+                  flexDirection: 'column'
+                }}>
+                  {articlePreviewTab === 'raw' ? (
+                    <pre style={{
+                      margin: 0,
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-word',
+                      fontFamily: 'monospace',
+                      fontSize: '0.82rem',
+                      color: '#1E293B',
+                      lineHeight: 1.6
+                    }}>
+                      {articleContent || '# No article generated yet.\n\nClick "Generate Full Article with Gemini" on the left.'}
+                    </pre>
+                  ) : (
+                    <div>
+                      {/* Topic Pill & Reading Time */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                        <span className="badge badge-emerald" style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          {activeOpportunity?.segment_id || 'Industry Analysis'}
+                        </span>
+                        <span style={{ fontSize: '0.74rem', color: '#64748B', fontWeight: 600 }}>
+                          ⏱️ {articleReadingTime} min read &bull; {articleContent ? articleContent.trim().split(/\s+/).length : 0} words
+                        </span>
+                      </div>
+
+                      {/* Hero Image if available */}
+                      {heroAsset?.url && (
+                        <div style={{ width: '100%', height: '240px', borderRadius: '8px', overflow: 'hidden', marginBottom: '20px', background: '#0F172A' }}>
+                          <img
+                            src={resolveImageSrc(heroAsset.base64 || heroAsset.url)}
+                            alt="Article Hero"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        </div>
+                      )}
+
+                      {/* Main Title */}
+                      <h1 style={{ fontSize: '1.65rem', fontWeight: 800, color: '#0F172A', lineHeight: 1.3, marginBottom: '8px', letterSpacing: '-0.3px' }}>
+                        {articleTitle || 'Your Article Title Will Appear Here'}
+                      </h1>
+
+                      {/* Subtitle */}
+                      {articleSubtitle && (
+                        <p style={{ fontSize: '1.05rem', color: '#475569', fontStyle: 'italic', margin: '0 0 16px 0', lineHeight: 1.4 }}>
+                          {articleSubtitle}
+                        </p>
+                      )}
+
+                      {/* Author Byline */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingBottom: '16px', borderBottom: '1px solid #F1F5F9', marginBottom: '20px' }}>
+                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, #00897B, #004D40)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF', fontWeight: 700, fontSize: '0.85rem' }}>
+                          TC
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0F172A' }}>Trend Contenter Intelligence Editorial</div>
+                          <div style={{ fontSize: '0.72rem', color: '#64748B' }}>Published &bull; Verified multi-source synthesis</div>
+                        </div>
+                      </div>
+
+                      {/* Outline Pill Navigation if available */}
+                      {articleOutline.length > 0 && (
+                        <div style={{ marginBottom: '18px', padding: '10px 14px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            Article Outline:
+                          </span>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
+                            {articleOutline.map((item, idx) => (
+                              <span key={idx} style={{ fontSize: '0.72rem', color: '#0F172A', background: '#FFF', padding: '2px 8px', borderRadius: '4px', border: '1px solid #CBD5E1' }}>
+                                {idx + 1}. {item}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Key Takeaways Callout Box */}
+                      {articleKeyTakeaways.length > 0 && (
+                        <div style={{ background: '#F0FDF4', border: '1.5px solid #86EFAC', borderRadius: '8px', padding: '16px', marginBottom: '24px' }}>
+                          <div style={{ fontSize: '0.80rem', fontWeight: 800, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                            Executive Key Takeaways
+                          </div>
+                          <ul style={{ margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {articleKeyTakeaways.map((point, idx) => (
+                              <li key={idx} style={{ fontSize: '0.84rem', color: '#14532D', lineHeight: 1.4 }}>
+                                {point}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Article Rendered Body */}
+                      <div style={{ fontSize: '0.95rem', color: '#334155', lineHeight: 1.75 }}>
+                        {renderArticleMarkdown(articleContent)}
+                      </div>
+
+                      {/* Verified Sources Accordion / Box */}
+                      {articleSources.length > 0 && (
+                        <div style={{ marginTop: '36px', paddingTop: '20px', borderTop: '1px solid #E2E8F0' }}>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0F172A', marginBottom: '10px' }}>
+                            📚 Evidence &amp; Research Citations ({articleSources.length})
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '10px' }}>
+                            {articleSources.map((src, idx) => (
+                              <div key={idx} style={{ padding: '10px 12px', background: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0', fontSize: '0.76rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                  <span className="badge badge-cyan" style={{ fontSize: '0.65rem' }}>{src.platform}</span>
+                                  {src.url && (
+                                    <a href={src.url} target="_blank" rel="noopener noreferrer" style={{ color: '#1A73E8', fontSize: '0.70rem', textDecoration: 'none', fontWeight: 600 }}>
+                                      View ↗
+                                    </a>
+                                  )}
+                                </div>
+                                <div style={{ fontWeight: 600, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {src.title}
+                                </div>
+                                {src.snippet && (
+                                  <div style={{ color: '#64748B', marginTop: '4px', fontSize: '0.70rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                                    {src.snippet}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

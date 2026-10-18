@@ -504,13 +504,24 @@ export interface CampaignDraft {
     emailPreviewMode?: 'desktop' | 'mobile';
   };
   publish_data?: {
-    publishChannel?: 'instagram' | 'facebook' | 'email';
+    publishChannel?: 'instagram' | 'facebook' | 'email' | 'article';
     fromEmail?: string;
     emailDeliveryMode?: 'sendgrid' | 'smtp';
     smtpHost?: string;
     smtpPort?: number;
     smtpUsername?: string;
     publishHistory?: Array<{ platform: string; id: string; url?: string; timestamp: string; title: string }>;
+  };
+  article_data?: {
+    articleTitle?: string;
+    articleSubtitle?: string;
+    articleMetaDescription?: string;
+    articleContent?: string;
+    articleTone?: string;
+    articleLength?: string;
+    articleTags?: string[];
+    articleSources?: ArticleSourceItem[];
+    readingTimeMinutes?: number;
   };
   status?: string;
   created_at?: string | null;
@@ -535,3 +546,37 @@ export interface ListCampaignDraftsResponse {
   total: number;
 }
 
+export interface ArticleSourceItem {
+  title: string;
+  url?: string | null;
+  platform: string;
+  snippet?: string | null;
+}
+
+export interface GenerateArticleRequest {
+  opportunity_id?: string | null;
+  concept_id?: string | null;
+  topic?: string | null;
+  target_audience?: string | null;
+  tone?: string;
+  length?: string;
+  include_db_evidence?: boolean;
+  include_search_sources?: boolean;
+  custom_instructions?: string | null;
+}
+
+export interface GenerateArticleResponse {
+  title: string;
+  subtitle: string;
+  meta_description: string;
+  reading_time_minutes: number;
+  target_audience: string;
+  tone: string;
+  outline: string[];
+  key_takeaways: string[];
+  content_markdown: string;
+  tags: string[];
+  sources_used: ArticleSourceItem[];
+  word_count: number;
+  model_used: string;
+}

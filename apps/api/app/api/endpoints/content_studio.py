@@ -40,6 +40,9 @@ from ...domain.models.content_studio import (
     SaveCampaignDraftRequest,
     CampaignDraftSummary,
     ListCampaignDraftsResponse,
+    GenerateArticleRequest,
+    GenerateArticleResponse,
+    ArticleSourceItem,
 )
 from ...domain.models.user import User
 from ...security.auth import require_permission
@@ -53,6 +56,7 @@ from ...services.content_studio.veo_service import veo_service
 from ...services.content_studio.experiment_service import experiment_service
 from ...services.content_studio.publisher_service import publisher_service
 from ...services.content_studio.draft_service import draft_service
+from ...services.content_studio.article_service import article_service
 from ...services.pdf_service import PDFService
 from .opportunities import _parse_dict, _parse_json_list
 
@@ -394,6 +398,27 @@ async def publish_email(req: PublishEmailRequest, current_user: User = Depends(r
         return await run_in_threadpool(publisher_service.publish_email, req)
     except Exception as e:
         raise _fail("/publish/email", e)
+
+
+# ---------------------------------------------------------------------------
+# Long-Form Editorial Article & Blog Studio
+# ---------------------------------------------------------------------------
+
+@router.post("/article/generate", response_model=GenerateArticleResponse, responses=HTTP_500_RESPONSE)
+async def generate_article(
+    req: GenerateArticleRequest,
+    db: AsyncSession = Depends(get_postgres_session),
+    current_user: User = Depends(require_write)
+):
+    """
+    Generates a high-impact long-form article or blog post synthesizing
+    database research (opportunities, audience gaps, investigation evidence)
+    and live web search sources.
+    """
+    try:
+        return await article_service.generate_article(req, db)
+    except Exception as e:
+        raise _fail("/article/generate", e)
 
 
 # ---------------------------------------------------------------------------

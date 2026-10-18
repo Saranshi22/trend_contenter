@@ -443,5 +443,42 @@ class ListCampaignDraftsResponse(BaseModel):
     total: int
 
 
+# ==========================================
+# Long-Form Editorial Article & Blog Studio
+# ==========================================
+
+class ArticleSourceItem(BaseModel):
+    title: str
+    url: Optional[str] = None
+    platform: str = "Web"
+    snippet: Optional[str] = None
 
 
+class GenerateArticleRequest(BaseModel):
+    opportunity_id: Optional[str] = Field(None, description="Linked Opportunity ID to pull DB research and evidence from")
+    concept_id: Optional[str] = Field(None, description="Linked Content Concept ID")
+    topic: Optional[str] = Field(None, description="Topic or headline of article")
+    target_audience: Optional[str] = Field(None, description="Target reader demographic")
+    tone: str = Field("thought_leadership", description="Tone: thought_leadership, deep_dive, how_to, opinion, journalistic")
+    length: str = Field("comprehensive", description="Length: short, standard, comprehensive")
+    include_db_evidence: bool = Field(True, description="Query DB investigation evidence (Reddit, YouTube, gaps, quotes)")
+    include_search_sources: bool = Field(True, description="Execute web search for real-time sources")
+    custom_instructions: Optional[str] = Field(None, description="Optional extra editorial instructions")
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+
+
+class GenerateArticleResponse(BaseModel):
+    title: str
+    subtitle: str
+    meta_description: str
+    reading_time_minutes: int
+    target_audience: str
+    tone: str
+    outline: List[str] = Field(default_factory=list)
+    key_takeaways: List[str] = Field(default_factory=list)
+    content_markdown: str
+    tags: List[str] = Field(default_factory=list)
+    sources_used: List[ArticleSourceItem] = Field(default_factory=list)
+    word_count: int
+    model_used: str
