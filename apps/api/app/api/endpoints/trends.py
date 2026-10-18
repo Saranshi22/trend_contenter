@@ -159,7 +159,7 @@ async def poll_trends_now(
             logger.warning(f"Could not persist trend {snap.trend_id} to DB: {e}")
 
         persisted_items.append(item)
-        if item.status == "qualified" or (item.internal_metrics and item.internal_metrics.status == "qualified"):
+        if item.internal_metrics and item.internal_metrics.status == "qualified":
             qualified_count += 1
         else:
             candidate_count += 1
