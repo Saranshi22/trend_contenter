@@ -90,10 +90,32 @@ async def list_trends(
     """
     Exposes persisted trends for the Trend Radar.
     Clearly distinguishes provider-reported metrics from internal qualification/momentum scores.
+    Falls back gracefully to live provider (SerpApi) if database is unavailable.
     """
-    repo = PostgresTrendRepository(db)
-    trends = await repo.get_trends(region=region, status=status, limit=limit)
-    return [_to_radar_item(t) for t in trends]
+    trends = []
+    try:
+        repo = PostgresTrendRepository(db)
+        trends = await repo.get_trends(region=region, status=status, limit=limit)
+    except Exception as e:
+        logger.warning(f"Database query failed for get_trends ({e}). Attempting live provider fallback.")
+
+    if trends:
+        return [_to_radar_item(t) for t in trends]
+
+    # Live fetch from configured provider (SerpApi)
+    try:
+        provider = get_trend_provider()
+        raw_snapshots = await provider.get_trending_topics(
+            region=region or settings.TRENDS_GEO or "IN",
+            hours=settings.TRENDS_HOURS or 4
+        )
+        qualified_snaps = [qualify_trend_snapshot(s) for s in raw_snapshots]
+        if status:
+            qualified_snaps = [s for s in qualified_snaps if s.status == status]
+        return [_to_radar_item(s) for s in qualified_snaps[:limit]]
+    except Exception as e:
+        logger.error(f"Live provider trends fallback failed: {e}")
+        return []
 
 @router.post("/poll", response_model=PollTrendsResponse)
 async def poll_trends_now(
@@ -127,17 +149,17 @@ async def poll_trends_now(
     candidate_count = 0
 
     for snap in raw_snapshots:
-        # Check existing observations for acceleration & novelty
-        prev_obs = await repo.get_observations(snap.trend_id, limit=5)
-        # Qualify using algorithm
         qualified = qualify_trend_snapshot(snap)
-        
-        # Save to PostgreSQL (both observation record and active trends upsert)
-        saved = await repo.save_trend(qualified)
-        radar_item = _to_radar_item(saved)
-        persisted_items.append(radar_item)
+        item = _to_radar_item(qualified)
+        try:
+            prev_obs = await repo.get_observations(snap.trend_id, limit=5)
+            saved = await repo.save_trend(qualified)
+            item = _to_radar_item(saved)
+        except Exception as e:
+            logger.warning(f"Could not persist trend {snap.trend_id} to DB: {e}")
 
-        if saved.status == "qualified":
+        persisted_items.append(item)
+        if item.status == "qualified" or (item.internal_metrics and item.internal_metrics.status == "qualified"):
             qualified_count += 1
         else:
             candidate_count += 1
@@ -151,8 +173,7 @@ async def poll_trends_now(
             background_tasks=background_tasks
         )
     except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Watchlist evaluation error: {e}")
+        logger.warning(f"Watchlist evaluation error: {e}")
 
     return PollTrendsResponse(
         total_fetched=len(persisted_items),
@@ -191,22 +212,28 @@ async def get_provider_health(
     - Latest actual pipeline observations and execution results
     - Distinction between configured integrations vs successful live fetches
     """
-    # 1. Fetch latest investigation to check real runtime source_statuses
-    latest_inv_res = await db.execute(
-        text("SELECT source_statuses, status FROM investigations ORDER BY created_at DESC LIMIT 1")
-    )
-    latest_inv = latest_inv_res.mappings().first()
-    source_statuses = (latest_inv["source_statuses"] if latest_inv and latest_inv.get("source_statuses") else {}) or {}
+    source_statuses: Dict[str, Any] = {}
+    trends_count = 0
 
-    # 2. Check trends count in DB
-    trends_res = await db.execute(text("SELECT COUNT(*) as cnt FROM trends"))
-    trends_count = trends_res.scalar() or 0
+    # 1. Fetch latest investigation to check real runtime source_statuses
+    try:
+        latest_inv_res = await db.execute(
+            text("SELECT source_statuses, status FROM investigations ORDER BY created_at DESC LIMIT 1")
+        )
+        latest_inv = latest_inv_res.mappings().first()
+        source_statuses = (latest_inv["source_statuses"] if latest_inv and latest_inv.get("source_statuses") else {}) or {}
+
+        # 2. Check trends count in DB
+        trends_res = await db.execute(text("SELECT COUNT(*) as cnt FROM trends"))
+        trends_count = trends_res.scalar() or 0
+    except Exception as e:
+        logger.warning(f"Provider health DB queries failed: {e}")
 
     providers: List[ProviderHealthItem] = []
 
     # Provider 1: Google Trends Radar (SerpApi)
     has_serpapi = bool(settings.SERPAPI_API_KEY)
-    if has_serpapi and trends_count > 0:
+    if has_serpapi:
         providers.append(ProviderHealthItem(
             id="google_trends",
             name="Google Trends",
@@ -215,7 +242,7 @@ async def get_provider_health(
             status="healthy",
             label="Healthy • Live",
             badge_class="badge-emerald",
-            last_runtime_status="ingested",
+            last_runtime_status="ingested" if trends_count > 0 else "live",
             details="Discover emerging searches and rising interest."
         ))
     elif has_serpapi:

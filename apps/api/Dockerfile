@@ -33,6 +33,7 @@ RUN pip install --upgrade litellm anthropic textblob google-generativeai google-
 
 # Copy application source code
 COPY . .
+RUN rm -f .env .env.*
 
 # Expose port (Cloud Run sets $PORT dynamically, default 8080)
 EXPOSE 8080

@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -89,6 +90,10 @@ class Settings(BaseSettings):
     JWT_SECRET: str = "supersecretkey" # Replace in production
     JWT_EXPIRY_MINUTES: int = 60
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=None if os.environ.get("APP_ENV") == "production" else (".env" if os.path.exists(".env") else None),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 settings = Settings()

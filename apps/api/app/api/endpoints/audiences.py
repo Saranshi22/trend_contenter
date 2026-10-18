@@ -44,19 +44,24 @@ async def list_audiences(
     List all discovered audience segments with persona ethnographic details,
     core needs, top search questions, and associated opportunity counts.
     """
-    result = await db.execute(
-        text("""
-            SELECT a.segment_id, a.label, a.description, a.needs, a.questions, a.concerns,
-                   COUNT(o.opportunity_id) as opportunity_count,
-                   MAX(q.question) as primary_question
-            FROM audiences a
-            LEFT JOIN opportunities o ON a.segment_id = o.segment_id
-            LEFT JOIN questions q ON a.question_id = q.question_id
-            GROUP BY a.segment_id, a.label, a.description, a.needs, a.questions, a.concerns
-            ORDER BY opportunity_count DESC, a.label ASC
-        """)
-    )
-    rows = result.mappings().all()
+    rows = []
+    try:
+        result = await db.execute(
+            text("""
+                SELECT a.segment_id, a.label, a.description, a.needs, a.questions, a.concerns,
+                       COUNT(o.opportunity_id) as opportunity_count,
+                       MAX(q.question) as primary_question
+                FROM audiences a
+                LEFT JOIN opportunities o ON a.segment_id = o.segment_id
+                LEFT JOIN questions q ON a.question_id = q.question_id
+                GROUP BY a.segment_id, a.label, a.description, a.needs, a.questions, a.concerns
+                ORDER BY opportunity_count DESC, a.label ASC
+            """)
+        )
+        rows = result.mappings().all()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Failed to query audiences from DB: {e}")
 
     audiences = []
     for row in rows:

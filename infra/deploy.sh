@@ -53,42 +53,34 @@ else
     echo "Repository $REPO_NAME already exists in $REGION."
 fi
 
-# 4. Configure Secret Manager Secrets
-echo -e "\n${CYAN}[3/5] Syncing secrets to Secret Manager...${NC}"
+# 4. Ensure Secret Manager Secrets Exist
+echo -e "\n${CYAN}[3/5] Verifying Secret Manager secrets...${NC}"
 
-create_or_update_secret() {
+ensure_secret_exists() {
     local secret_name="$1"
-    local secret_val="${2:-}"
-
-    if [ -z "$secret_val" ]; then
-        secret_val="not_configured"
-    fi
 
     if ! gcloud secrets describe "$secret_name" --project="$PROJECT_ID" &>/dev/null; then
-        echo "Creating secret: $secret_name..."
+        echo "Creating initial placeholder secret: $secret_name..."
         gcloud secrets create "$secret_name" \
             --replication-policy="automatic" \
             --project="$PROJECT_ID"
+        echo -n "not_configured" | gcloud secrets versions add "$secret_name" \
+            --data-file=- \
+            --project="$PROJECT_ID" >/dev/null
+        echo -e "  ✓ Created placeholder secret ${GREEN}${secret_name}${NC}."
+    else
+        echo -e "  ✓ Secret ${GREEN}${secret_name}${NC} is present in Secret Manager."
     fi
-
-    echo -n "$secret_val" | gcloud secrets versions add "$secret_name" \
-        --data-file=- \
-        --project="$PROJECT_ID" >/dev/null
-    echo -e "  ✓ Secret ${GREEN}${secret_name}${NC} updated."
 }
 
-# Read secrets from local .env if present
-if [ -f ".env" ]; then
-    echo "Reading credentials from local .env file..."
-    source .env || true
-fi
-
-# Store secrets in Secret Manager
-create_or_update_secret "serpapi-key" "${SERPAPI_API_KEY:-}"
-create_or_update_secret "openai-key" "${OPENAI_API_KEY:-}"
-create_or_update_secret "gemini-key" "${GEMINI_API_KEY:-}"
-create_or_update_secret "jwt-secret" "${JWT_SECRET:-supersecretkey_production}"
-create_or_update_secret "postgres-uri" "${POSTGRES_URI:-postgresql+asyncpg://user:password@localhost:5432/trend_contenter}"
+# Ensure required secrets exist in Secret Manager without reading or using .env
+ensure_secret_exists "serpapi-key"
+ensure_secret_exists "openai-key"
+ensure_secret_exists "gemini-key"
+ensure_secret_exists "jwt-secret"
+ensure_secret_exists "postgres-uri"
+ensure_secret_exists "socialcrawl-key"
+ensure_secret_exists "youtube-key"
 
 # Grant Cloud Build & Compute Service Accounts all required IAM roles
 PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format="value(projectNumber)")
