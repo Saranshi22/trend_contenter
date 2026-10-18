@@ -258,24 +258,47 @@ class PublisherService:
         )
 
     def publish_facebook(self, req: PublishFacebookRequest) -> PublishResult:
-        """Publishes post + image to Facebook Page via Graph API."""
+        """Publishes photo or video (feed post or Reel) to Facebook Page via Graph API."""
         try:
-            target_image_url = _resolve_absolute_image_url(req.image_url)
-            logger.info(f"Publishing to Facebook Page with resolved image: {target_image_url}")
-            res = fb_publisher.publish(
-                image_url=target_image_url,
-                text=req.text,
-                hashtags=req.hashtags,
-                page_id=req.page_id,
-                access_token=req.access_token
+            target_media = req.media_url or req.video_url or req.image_url
+            if not target_media:
+                raise ValueError("Must provide media_url, video_url, or image_url to publish to Facebook.")
+
+            target_media_url = _resolve_absolute_image_url(target_media)
+            target_format = (req.target_format or "POST").upper()
+            logger.info(
+                f"Publishing to Facebook Page: format={target_format}, type={req.media_type}, url={target_media_url}, title={req.title}"
             )
-            post_id = res.get("post_id") or res.get("photo_id")
+
+            res = fb_publisher.publish(
+                media_url=target_media_url,
+                image_url=target_media_url,
+                video_url=target_media_url,
+                target_format=target_format,
+                media_type=req.media_type,
+                title=req.title or "",
+                text=req.text or "",
+                hashtags=req.hashtags,
+                scheduled_at=req.scheduled_at,
+                page_id=req.page_id,
+                access_token=req.access_token,
+                gcs_bucket=req.gcs_bucket,
+                gcloud_service_key=req.gcloud_service_key,
+            )
+            post_id = res.get("post_id") or res.get("video_id") or res.get("photo_id")
+            resolved_fmt = res.get("target_format", target_format)
+            format_names = {
+                "REEL": "Facebook Reel",
+                "POST": "Facebook Video Post" if res.get("media_type") == "VIDEO" else "Facebook Feed Post",
+            }
+            display_format = format_names.get(resolved_fmt, f"Facebook {resolved_fmt}")
+
             return PublishResult(
                 platform="facebook",
                 success=True,
                 post_id=post_id,
                 url=f"https://facebook.com/{post_id}" if post_id else None,
-                message="Successfully published photo post to Facebook Page!",
+                message=f"Successfully published to {display_format}!",
                 details=res
             )
         except Exception as e:
@@ -283,13 +306,26 @@ class PublisherService:
             raise RuntimeError(f"Facebook publishing failed: {e}") from e
 
     def publish_instagram(self, req: PublishInstagramRequest) -> PublishResult:
-        """Publishes photo + caption to Instagram Business/Creator account."""
+        """Publishes photo or video as Feed Post, Reel, or Story to Instagram."""
         try:
-            target_image_url = _resolve_absolute_image_url(req.image_url)
-            logger.info(f"Publishing to Instagram with image: {target_image_url}")
+            target_media = req.media_url or req.video_url or req.image_url
+            if not target_media:
+                raise ValueError("Must provide media_url, video_url, or image_url to publish to Instagram.")
+
+            target_media_url = _resolve_absolute_image_url(target_media)
+            target_format = (req.target_format or "POST").upper()
+            logger.info(
+                f"Publishing to Instagram: format={target_format}, type={req.media_type}, url={target_media_url}"
+            )
+
             res = ig_publisher.publish(
-                image_url=target_image_url,
-                text=req.text,
+                media_url=target_media_url,
+                image_url=target_media_url,
+                video_url=target_media_url,
+                target_format=target_format,
+                media_type=req.media_type,
+                share_to_feed=req.share_to_feed,
+                text=req.text or "",
                 hashtags=req.hashtags,
                 instagram_user_id=req.instagram_user_id,
                 access_token=req.access_token,
@@ -297,12 +333,20 @@ class PublisherService:
                 gcloud_service_key=req.gcloud_service_key,
             )
             media_id = res.get("published_media_id") or res.get("creation_id")
+            resolved_fmt = res.get("target_format", target_format)
+            format_names = {
+                "REEL": "Instagram Reel",
+                "STORY": "Instagram Story",
+                "POST": "Instagram Feed",
+            }
+            display_format = format_names.get(resolved_fmt, f"Instagram {resolved_fmt}")
+
             return PublishResult(
                 platform="instagram",
                 success=True,
                 post_id=media_id,
                 url=f"https://instagram.com/p/{media_id}" if media_id else None,
-                message="Successfully published photo post to Instagram Feed!",
+                message=f"Successfully published to {display_format}!",
                 details=res
             )
         except Exception as e:

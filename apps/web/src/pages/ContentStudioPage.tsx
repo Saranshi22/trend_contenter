@@ -34,7 +34,9 @@ import {
   IconLock,
   IconSearch,
   IconFileText,
-  IconVideo
+  IconVideo,
+  IconImage,
+  IconLightning
 } from '../components/Icons';
 
 interface ContentStudioPageProps {
@@ -296,7 +298,15 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
 
   // Copy Editors for Platforms
   const [instagramCaption, setInstagramCaption] = useState<string>('');
+  const [igTargetFormat, setIgTargetFormat] = useState<'POST' | 'REEL' | 'STORY'>('POST');
+  const [igStoryMediaType, setIgStoryMediaType] = useState<'IMAGE' | 'VIDEO'>('IMAGE');
+  const [igShareToFeed, setIgShareToFeed] = useState<boolean>(true);
+  const [customVideoUrl, setCustomVideoUrl] = useState<string>('');
   const [facebookPostCopy, setFacebookPostCopy] = useState<string>('');
+  const [fbTargetFormat, setFbTargetFormat] = useState<'POST' | 'REEL'>('POST');
+  const [fbPostMediaType, setFbPostMediaType] = useState<'IMAGE' | 'VIDEO'>('IMAGE');
+  const [fbVideoTitle, setFbVideoTitle] = useState<string>('');
+  const [fbCustomVideoUrl, setFbCustomVideoUrl] = useState<string>('');
   
   // Configurable Email Studio State
   const [emailRecipients, setEmailRecipients] = useState<string>('team@company.com');
@@ -1650,23 +1660,41 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
     setCurrentStage('publish');
   };
 
-  // Publish to Facebook
+  // Publish to Facebook (Feed Post, Video Post, or Reel)
   const handlePublishFacebook = async () => {
-    if (!heroAsset || !heroAsset.url) {
-      notify('Please select an artwork asset for Facebook publishing.', 'error');
+    const isVideo = fbTargetFormat === 'REEL' || (fbTargetFormat === 'POST' && fbPostMediaType === 'VIDEO') || Boolean(heroAsset?.url && (heroAsset.url.endsWith('.mp4') || heroAsset.url.endsWith('.mov')));
+    const rawTarget = (isVideo && fbCustomVideoUrl.trim()) ? fbCustomVideoUrl.trim() : (heroAsset?.url || '');
+
+    if (!rawTarget) {
+      if (isVideo) {
+        notify('Please provide a video URL or hosted media asset to publish to Facebook.', 'error');
+      } else {
+        notify('Please select an artwork asset for Facebook publishing.', 'error');
+      }
       return;
     }
+
     setIsPublishing(true);
-    startCooking('Publishing to Facebook Page', [
+    const cookingTitle = fbTargetFormat === 'REEL'
+      ? 'Publishing Facebook Reel'
+      : (isVideo ? 'Uploading Facebook Video Post' : 'Publishing to Facebook Page');
+
+    startCooking(cookingTitle, [
       'Connecting to Facebook Graph gateway...',
       'Validating Page ID and Access Token...',
-      'Uploading media container & post caption...',
+      isVideo ? 'Transferring video stream & processing on Meta servers...' : 'Uploading media container & post caption...',
       'Confirming live publication...'
     ], '#1877F2');
 
     try {
+      const resolvedMediaUrl = resolvePublishImageUrl(rawTarget);
       const payload: any = {
-        image_url: resolvePublishImageUrl(heroAsset.url),
+        media_url: resolvedMediaUrl,
+        image_url: resolvedMediaUrl,
+        video_url: isVideo ? resolvedMediaUrl : undefined,
+        target_format: fbTargetFormat,
+        media_type: isVideo ? 'VIDEO' : 'IMAGE',
+        title: fbVideoTitle.trim() || undefined,
         text: facebookPostCopy,
         hashtags: activeConcept?.hashtags || []
       };
@@ -1682,9 +1710,10 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
       if (res.ok) {
         const data: PublishResult = await res.json();
         stopCooking('Published to Facebook!');
-        notify(data.message || 'Published to Facebook Page!', 'success');
+        const formatLabel = fbTargetFormat === 'REEL' ? 'Facebook Reel' : (isVideo ? 'Facebook Video Post' : 'Facebook Page Post');
+        notify(data.message || `Published to ${formatLabel}!`, 'success');
         setPublishHistory(prev => [
-          { platform: 'facebook', id: data.post_id || 'fb_post', url: data.url || undefined, timestamp: new Date().toLocaleTimeString(), title: activeConcept?.title || 'Facebook Post' },
+          { platform: 'facebook', id: data.post_id || 'fb_post', url: data.url || undefined, timestamp: new Date().toLocaleTimeString(), title: `${activeConcept?.title || 'Facebook'} (${formatLabel})` },
           ...prev
         ]);
         fetchPublishingStatus();
@@ -1702,25 +1731,43 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
     }
   };
 
-  // Publish to Instagram
+  // Publish to Instagram (Feed Post, Reel, or Story)
   const handlePublishInstagram = async () => {
-    if (!heroAsset || !heroAsset.url) {
-      notify('Please select an artwork asset for Instagram publishing.', 'error');
+    const isVideo = igTargetFormat === 'REEL' || (igTargetFormat === 'STORY' && igStoryMediaType === 'VIDEO') || Boolean(heroAsset?.url && (heroAsset.url.endsWith('.mp4') || heroAsset.url.endsWith('.mov')));
+    const rawTarget = (isVideo && customVideoUrl.trim()) ? customVideoUrl.trim() : (heroAsset?.url || '');
+
+    if (!rawTarget) {
+      if (isVideo) {
+        notify('Please provide a video URL or hosted media asset to publish.', 'error');
+      } else {
+        notify('Please select an artwork asset for Instagram publishing.', 'error');
+      }
       return;
     }
+
     setIsPublishing(true);
-    startCooking('Publishing to Instagram Feed', [
+    const cookingTitle = igTargetFormat === 'REEL'
+      ? 'Publishing Reel to Instagram'
+      : (igTargetFormat === 'STORY' ? 'Publishing Story to Instagram' : 'Publishing to Instagram Feed');
+
+    startCooking(cookingTitle, [
       'Connecting to Instagram Content Publishing API...',
-      'Validating Instagram User ID & Token...',
-      'Creating media container & attaching caption...',
-      'Publishing container to live feed...'
+      'Validating Instagram User ID & Graph Token...',
+      isVideo ? 'Creating video container & awaiting Instagram transcoding...' : 'Creating media container & syncing asset...',
+      'Publishing container to live profile...'
     ], '#E1306C');
 
     try {
+      const resolvedMediaUrl = resolvePublishImageUrl(rawTarget);
       const payload: any = {
-        image_url: resolvePublishImageUrl(heroAsset.url),
-        text: instagramCaption,
-        hashtags: activeConcept?.hashtags || []
+        media_url: resolvedMediaUrl,
+        image_url: resolvedMediaUrl,
+        video_url: isVideo ? resolvedMediaUrl : undefined,
+        target_format: igTargetFormat,
+        media_type: isVideo ? 'VIDEO' : 'IMAGE',
+        share_to_feed: igShareToFeed,
+        text: igTargetFormat === 'STORY' ? '' : instagramCaption,
+        hashtags: igTargetFormat === 'STORY' ? [] : (activeConcept?.hashtags || [])
       };
       if (igUserId.trim()) payload.instagram_user_id = igUserId.trim();
       if (igAccessToken.trim()) payload.access_token = igAccessToken.trim();
@@ -1734,9 +1781,10 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
       if (res.ok) {
         const data: PublishResult = await res.json();
         stopCooking('Published to Instagram!');
-        notify(data.message || 'Published to Instagram Feed!', 'success');
+        const formatLabel = igTargetFormat === 'REEL' ? 'Instagram Reel' : (igTargetFormat === 'STORY' ? 'Instagram Story' : 'Instagram Feed');
+        notify(data.message || `Published to ${formatLabel}!`, 'success');
         setPublishHistory(prev => [
-          { platform: 'instagram', id: data.post_id || 'ig_post', url: data.url || undefined, timestamp: new Date().toLocaleTimeString(), title: activeConcept?.title || 'Instagram Post' },
+          { platform: 'instagram', id: data.post_id || 'ig_post', url: data.url || undefined, timestamp: new Date().toLocaleTimeString(), title: `${activeConcept?.title || 'Instagram'} (${formatLabel})` },
           ...prev
         ]);
         fetchPublishingStatus();
@@ -4583,29 +4631,518 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
           {/* CHANNEL 1: INSTAGRAM PUBLISHER */}
           {publishChannel === 'instagram' && (
             <div className="grid-2">
-              {/* Copy Editor */}
+              {/* Format & Copy Configuration Card */}
               <div className="glass-card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <h4 style={{ fontSize: '1rem', fontWeight: 600, margin: 0 }}>Instagram Caption &amp; Hashtags</h4>
+                {/* Format Selector: Post, Reel, Story */}
+                <div style={{ marginBottom: '16px' }}>
+                  <label className="subheading-label" style={{ marginBottom: '8px', display: 'block' }}>
+                    Publish Destination &amp; Format
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                    <button
+                      type="button"
+                      className={igTargetFormat === 'POST' ? 'btn-primary' : 'btn-outline'}
+                      style={{
+                        padding: '10px 12px',
+                        fontSize: '0.82rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '4px',
+                        borderColor: igTargetFormat === 'POST' ? '#E1306C' : undefined,
+                        background: igTargetFormat === 'POST' ? '#E1306C' : undefined,
+                        color: igTargetFormat === 'POST' ? '#FFFFFF' : undefined,
+                      }}
+                      onClick={() => setIgTargetFormat('POST')}
+                    >
+                      <IconImage size={18} />
+                      <span style={{ fontWeight: 600 }}>Feed Post</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={igTargetFormat === 'REEL' ? 'btn-primary' : 'btn-outline'}
+                      style={{
+                        padding: '10px 12px',
+                        fontSize: '0.82rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '4px',
+                        borderColor: igTargetFormat === 'REEL' ? '#833AB4' : undefined,
+                        background: igTargetFormat === 'REEL' ? 'linear-gradient(135deg, #833AB4, #FD1D1D)' : undefined,
+                        color: igTargetFormat === 'REEL' ? '#FFFFFF' : undefined,
+                      }}
+                      onClick={() => setIgTargetFormat('REEL')}
+                    >
+                      <IconVideo size={18} />
+                      <span style={{ fontWeight: 600 }}>Reel</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={igTargetFormat === 'STORY' ? 'btn-primary' : 'btn-outline'}
+                      style={{
+                        padding: '10px 12px',
+                        fontSize: '0.82rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '4px',
+                        borderColor: igTargetFormat === 'STORY' ? '#F77737' : undefined,
+                        background: igTargetFormat === 'STORY' ? 'linear-gradient(135deg, #F58529, #DD2A7B)' : undefined,
+                        color: igTargetFormat === 'STORY' ? '#FFFFFF' : undefined,
+                      }}
+                      onClick={() => setIgTargetFormat('STORY')}
+                    >
+                      <IconLightning size={18} />
+                      <span style={{ fontWeight: 600 }}>Story</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Video URL Input for Reels & Video Stories */}
+                {(igTargetFormat === 'REEL' || (igTargetFormat === 'STORY' && igStoryMediaType === 'VIDEO')) && (
+                  <div style={{ marginBottom: '16px', padding: '12px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #CBD5E1' }}>
+                    <label className="subheading-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <IconVideo size={14} color="#833AB4" />
+                      <span>Video Asset URL / Media Path (.mp4, .mov)</span>
+                    </label>
+                    <input
+                      type="text"
+                      className="input-glass"
+                      style={{ marginTop: '6px' }}
+                      placeholder="https://your-public-host.com/video.mp4 or /api/v1/content-studio/media/..."
+                      value={customVideoUrl}
+                      onChange={(e) => setCustomVideoUrl(e.target.value)}
+                    />
+                    <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      Meta requires a public URL for video ingestion. Local assets are automatically synced to GCS and signed.
+                    </div>
+                  </div>
+                )}
+
+                {/* Reels Option: Share to Feed Checkbox */}
+                {igTargetFormat === 'REEL' && (
+                  <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="checkbox"
+                      id="igShareToFeed"
+                      checked={igShareToFeed}
+                      onChange={(e) => setIgShareToFeed(e.target.checked)}
+                      style={{ width: '16px', height: '16px', accentColor: '#E1306C' }}
+                    />
+                    <label htmlFor="igShareToFeed" style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer' }}>
+                      Also share Reel to Main Profile Feed grid
+                    </label>
+                  </div>
+                )}
+
+                {/* Story Media Type Switcher */}
+                {igTargetFormat === 'STORY' && (
+                  <div style={{ marginBottom: '16px' }}>
+                    <label className="subheading-label" style={{ marginBottom: '6px', display: 'block' }}>
+                      Story Media Content
+                    </label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        className={igStoryMediaType === 'IMAGE' ? 'btn-primary' : 'btn-outline'}
+                        style={{ padding: '6px 14px', fontSize: '0.78rem' }}
+                        onClick={() => setIgStoryMediaType('IMAGE')}
+                      >
+                        Photo Story
+                      </button>
+                      <button
+                        type="button"
+                        className={igStoryMediaType === 'VIDEO' ? 'btn-primary' : 'btn-outline'}
+                        style={{ padding: '6px 14px', fontSize: '0.78rem' }}
+                        onClick={() => setIgStoryMediaType('VIDEO')}
+                      >
+                        Video Story
+                      </button>
+                    </div>
+                    <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: '6px' }}>
+                      Instagram Stories display full-screen immersive media. (Captions are not attached to Stories by Meta Graph API).
+                    </div>
+                  </div>
+                )}
+
+                {/* Caption & Hashtags Editor (for POST and REEL) */}
+                {igTargetFormat !== 'STORY' ? (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <label className="subheading-label" style={{ margin: 0 }}>
+                        {igTargetFormat === 'REEL' ? 'Reel Caption &amp; Hashtags' : 'Instagram Caption &amp; Hashtags'}
+                      </label>
+                      <button 
+                        type="button"
+                        className="btn-outline"
+                        style={{ padding: '4px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        onClick={() => copyToClipboard(instagramCaption, 'Instagram Caption')}
+                      >
+                        <IconCopy size={12} />
+                        <span>Copy</span>
+                      </button>
+                    </div>
+                    <div style={{ marginBottom: '14px' }}>
+                      <textarea 
+                        className="input-glass"
+                        rows={7}
+                        value={instagramCaption}
+                        onChange={(e) => setInstagramCaption(e.target.value)}
+                        placeholder="Write your Instagram caption..."
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        {instagramCaption.length}/2200
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: '20px' }}>
+                      <label className="subheading-label">Active Hashtags</label>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        {(activeConcept?.hashtags || ['trend', 'innovation', 'creator']).map((tag, idx) => (
+                          <span key={idx} className="metric-pill metric-pill-cyan" style={{ fontSize: '0.78rem' }}>
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : null}
+
+                {/* Dispatch Button */}
+                <button 
+                  className="btn-primary" 
+                  style={{
+                    width: '100%',
+                    padding: '12px 20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    background: igTargetFormat === 'REEL' ? 'linear-gradient(135deg, #833AB4, #FD1D1D)' : (igTargetFormat === 'STORY' ? 'linear-gradient(135deg, #F58529, #DD2A7B)' : '#E1306C'),
+                    boxShadow: '0 4px 14px rgba(225, 48, 108, 0.3)'
+                  }}
+                  onClick={handlePublishInstagram}
+                  disabled={isPublishing}
+                >
+                  {igTargetFormat === 'REEL' ? <IconVideo size={16} /> : (igTargetFormat === 'STORY' ? <IconLightning size={16} /> : <IconSend size={16} />)}
+                  <span>
+                    {isPublishing
+                      ? 'Publishing to Instagram...'
+                      : igTargetFormat === 'REEL'
+                      ? 'Publish Reel to Instagram'
+                      : igTargetFormat === 'STORY'
+                      ? 'Publish Story to Instagram'
+                      : 'Publish to Instagram Feed'}
+                  </span>
+                </button>
+              </div>
+
+              {/* Dynamic Mobile Phone Mockup Preview */}
+              <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+                  <IconSmartphone size={16} />
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Instagram {igTargetFormat === 'REEL' ? 'Reel Preview' : (igTargetFormat === 'STORY' ? 'Story Preview' : 'Feed Mockup')}
+                  </span>
+                </div>
+
+                <div 
+                  style={{
+                    width: '320px',
+                    borderRadius: '28px',
+                    border: '8px solid #1E293B',
+                    background: '#0F172A',
+                    overflow: 'hidden',
+                    boxShadow: 'var(--shadow-modal)',
+                    position: 'relative'
+                  }}
+                >
+                  {/* FEED POST MOCKUP */}
+                  {igTargetFormat === 'POST' && (
+                    <div style={{ background: '#FFFFFF', minHeight: '440px', display: 'flex', flexDirection: 'column' }}>
+                      {/* Fake IG Header */}
+                      <div style={{ padding: '12px 14px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(45deg, #F58529, #DD2A7B, #8134AF)' }} />
+                        <span style={{ fontWeight: 700, fontSize: '0.85rem', color: '#0F172A' }}>trend.contenter</span>
+                      </div>
+
+                      {/* Media (Video or Image) */}
+                      <div style={{ width: '100%', height: '280px', background: '#0F172A', position: 'relative' }}>
+                        {heroAsset?.url ? (
+                          heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4') || heroAsset.url.includes('.mp4') ? (
+                            <video
+                              src={resolveImageSrc(heroAsset.url)}
+                              autoPlay
+                              loop
+                              muted
+                              playsInline
+                              controls
+                              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                            />
+                          ) : (
+                            <img src={resolveImageSrc(heroAsset.base64 || heroAsset.url)} alt="IG preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          )
+                        ) : (
+                          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', fontSize: '0.8rem' }}>No Artwork Selected</div>
+                        )}
+                      </div>
+
+                      {/* Fake Actions & Caption */}
+                      <div style={{ padding: '12px 14px' }}>
+                        <div style={{ display: 'flex', gap: '12px', marginBottom: '8px', fontSize: '1rem' }}>
+                          <span>❤️</span><span>💬</span><span>↗️</span>
+                        </div>
+                        <div style={{ fontSize: '0.82rem', lineHeight: 1.4, color: '#1E293B' }}>
+                          <strong style={{ marginRight: '6px' }}>trend.contenter</strong>
+                          {instagramCaption ? `${instagramCaption.slice(0, 100)}...` : 'Your post caption will appear here.'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* REEL MOCKUP */}
+                  {igTargetFormat === 'REEL' && (
+                    <div style={{ height: '480px', position: 'relative', overflow: 'hidden', background: '#0F172A' }}>
+                      {/* Video/Image Background */}
+                      {customVideoUrl ? (
+                        <video src={customVideoUrl} autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : heroAsset?.url ? (
+                        heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4') || heroAsset.url.includes('.mp4') ? (
+                          <video src={resolveImageSrc(heroAsset.url)} autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <img src={resolveImageSrc(heroAsset.base64 || heroAsset.url)} alt="Reel preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        )
+                      ) : (
+                        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}>Video Preview</div>
+                      )}
+
+                      {/* Top Reels Badge */}
+                      <div style={{ position: 'absolute', top: '14px', left: '14px', display: 'flex', alignItems: 'center', gap: '6px', color: '#FFFFFF', fontSize: '0.82rem', fontWeight: 700, textShadow: '0 2px 4px rgba(0,0,0,0.6)' }}>
+                        <IconVideo size={16} />
+                        <span>Reels</span>
+                      </div>
+
+                      {/* Right Action Stack */}
+                      <div style={{ position: 'absolute', right: '12px', bottom: '60px', display: 'flex', flexDirection: 'column', gap: '14px', alignItems: 'center', color: '#FFFFFF', textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: '0.72rem' }}>
+                          <span style={{ fontSize: '1.25rem' }}>❤️</span>
+                          <span>18.4K</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: '0.72rem' }}>
+                          <span style={{ fontSize: '1.25rem' }}>💬</span>
+                          <span>420</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: '0.72rem' }}>
+                          <span style={{ fontSize: '1.25rem' }}>↗️</span>
+                          <span>Share</span>
+                        </div>
+                      </div>
+
+                      {/* Bottom Caption & Profile Overlay */}
+                      <div style={{ position: 'absolute', bottom: '0', left: '0', right: '50px', padding: '16px 14px', background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)', color: '#FFFFFF' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                          <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'linear-gradient(45deg, #F58529, #DD2A7B)' }} />
+                          <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>trend.contenter</span>
+                        </div>
+                        <div style={{ fontSize: '0.78rem', lineHeight: 1.3, maxHeight: '42px', overflow: 'hidden' }}>
+                          {instagramCaption ? `${instagramCaption.slice(0, 85)}...` : 'Your Reel caption will overlay here.'}
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: '#E2E8F0', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span>🎵 Original Audio - trend.contenter</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* STORY MOCKUP */}
+                  {igTargetFormat === 'STORY' && (
+                    <div style={{ height: '480px', position: 'relative', overflow: 'hidden', background: '#0F172A' }}>
+                      {/* Media Background */}
+                      {customVideoUrl ? (
+                        <video src={customVideoUrl} autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : heroAsset?.url ? (
+                        heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4') || heroAsset.url.includes('.mp4') ? (
+                          <video src={resolveImageSrc(heroAsset.url)} autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <img src={resolveImageSrc(heroAsset.base64 || heroAsset.url)} alt="Story preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        )
+                      ) : (
+                        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}>Story Media</div>
+                      )}
+
+                      {/* Top Story Progress Bars */}
+                      <div style={{ position: 'absolute', top: '10px', left: '10px', right: '10px', display: 'flex', gap: '4px' }}>
+                        <div style={{ flex: 1, height: '2px', background: '#FFFFFF', borderRadius: '2px' }} />
+                        <div style={{ flex: 1, height: '2px', background: 'rgba(255,255,255,0.4)', borderRadius: '2px' }} />
+                      </div>
+
+                      {/* Profile Header */}
+                      <div style={{ position: 'absolute', top: '20px', left: '12px', display: 'flex', alignItems: 'center', gap: '8px', color: '#FFFFFF', textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
+                        <div style={{ width: '28px', height: '28px', borderRadius: '50%', border: '2px solid #E1306C', background: 'linear-gradient(45deg, #F58529, #DD2A7B)' }} />
+                        <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>trend.contenter</span>
+                        <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.8)' }}>Just now</span>
+                      </div>
+
+                      {/* Bottom Story Message Bar */}
+                      <div style={{ position: 'absolute', bottom: '12px', left: '12px', right: '12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ flex: 1, padding: '8px 12px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.6)', background: 'rgba(0,0,0,0.3)', color: '#FFFFFF', fontSize: '0.75rem' }}>
+                          Send message...
+                        </div>
+                        <span style={{ fontSize: '1.2rem', color: '#FFFFFF' }}>❤️</span>
+                        <span style={{ fontSize: '1.2rem', color: '#FFFFFF' }}>✈️</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* CHANNEL 2: FACEBOOK PUBLISHER */}
+          {publishChannel === 'facebook' && (
+            <div className="grid-2">
+              {/* Format & Copy Configuration Card */}
+              <div className="glass-card">
+                {/* Format Selector: Feed Post vs Reel */}
+                <div style={{ marginBottom: '16px' }}>
+                  <label className="subheading-label" style={{ marginBottom: '8px', display: 'block' }}>
+                    Publish Destination &amp; Format
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+                    <button
+                      type="button"
+                      className={fbTargetFormat === 'POST' ? 'btn-primary' : 'btn-outline'}
+                      style={{
+                        padding: '10px 14px',
+                        fontSize: '0.84rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        borderColor: fbTargetFormat === 'POST' ? '#1877F2' : undefined,
+                        background: fbTargetFormat === 'POST' ? '#1877F2' : undefined,
+                        color: fbTargetFormat === 'POST' ? '#FFFFFF' : undefined,
+                      }}
+                      onClick={() => setFbTargetFormat('POST')}
+                    >
+                      <IconMonitor size={16} />
+                      <span style={{ fontWeight: 600 }}>Page Feed Post</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className={fbTargetFormat === 'REEL' ? 'btn-primary' : 'btn-outline'}
+                      style={{
+                        padding: '10px 14px',
+                        fontSize: '0.84rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        borderColor: fbTargetFormat === 'REEL' ? '#0062E0' : undefined,
+                        background: fbTargetFormat === 'REEL' ? 'linear-gradient(135deg, #1877F2, #00C6FF)' : undefined,
+                        color: fbTargetFormat === 'REEL' ? '#FFFFFF' : undefined,
+                      }}
+                      onClick={() => setFbTargetFormat('REEL')}
+                    >
+                      <IconVideo size={16} />
+                      <span style={{ fontWeight: 600 }}>Facebook Reel</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Feed Post Media Type Switcher: Photo vs Video */}
+                {fbTargetFormat === 'POST' && (
+                  <div style={{ marginBottom: '14px' }}>
+                    <label className="subheading-label" style={{ marginBottom: '6px', display: 'block' }}>
+                      Post Media Content
+                    </label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        type="button"
+                        className={fbPostMediaType === 'IMAGE' ? 'btn-primary' : 'btn-outline'}
+                        style={{ padding: '6px 14px', fontSize: '0.78rem' }}
+                        onClick={() => setFbPostMediaType('IMAGE')}
+                      >
+                        Photo Post
+                      </button>
+                      <button
+                        type="button"
+                        className={fbPostMediaType === 'VIDEO' ? 'btn-primary' : 'btn-outline'}
+                        style={{ padding: '6px 14px', fontSize: '0.78rem' }}
+                        onClick={() => setFbPostMediaType('VIDEO')}
+                      >
+                        Video Post
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Video Inputs (Title & Video URL) for Video Post & Facebook Reel */}
+                {(fbTargetFormat === 'REEL' || (fbTargetFormat === 'POST' && fbPostMediaType === 'VIDEO')) && (
+                  <div style={{ marginBottom: '16px', padding: '14px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #CBD5E1', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <div>
+                      <label className="subheading-label">
+                        {fbTargetFormat === 'REEL' ? 'Reel Title (Optional)' : 'Video Title (Optional)'}
+                      </label>
+                      <input
+                        type="text"
+                        className="input-glass"
+                        style={{ marginTop: '4px' }}
+                        placeholder="e.g. Next-Gen AI Trends Explainer"
+                        value={fbVideoTitle}
+                        onChange={(e) => setFbVideoTitle(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className="subheading-label" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <IconVideo size={14} color="#1877F2" />
+                        <span>Video Asset URL / Media Path (.mp4, .mov)</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="input-glass"
+                        style={{ marginTop: '4px' }}
+                        placeholder="https://your-public-host.com/video.mp4 or /api/v1/content-studio/media/..."
+                        value={fbCustomVideoUrl}
+                        onChange={(e) => setFbCustomVideoUrl(e.target.value)}
+                      />
+                      <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                        Meta Graph API directly ingests hosted video streams. Local assets are automatically synced to GCS.
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Post Caption & Narrative */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label className="subheading-label" style={{ margin: 0 }}>
+                    {fbTargetFormat === 'REEL' ? 'Reel Caption &amp; Description' : 'Post Caption &amp; Narrative'}
+                  </label>
                   <button 
                     type="button"
                     className="btn-outline"
                     style={{ padding: '4px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                    onClick={() => copyToClipboard(instagramCaption, 'Instagram Caption')}
+                    onClick={() => copyToClipboard(facebookPostCopy, 'Facebook Post')}
                   >
                     <IconCopy size={12} />
                     <span>Copy</span>
                   </button>
                 </div>
                 <div style={{ marginBottom: '14px' }}>
-                  <label className="subheading-label">Caption ({instagramCaption.length}/2200)</label>
                   <textarea 
                     className="input-glass"
-                    rows={8}
-                    value={instagramCaption}
-                    onChange={(e) => setInstagramCaption(e.target.value)}
-                    placeholder="Write your Instagram caption..."
+                    rows={7}
+                    value={facebookPostCopy}
+                    onChange={(e) => setFacebookPostCopy(e.target.value)}
+                    placeholder="Write your Facebook post..."
                   />
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    {facebookPostCopy.length} characters
+                  </div>
                 </div>
 
                 <div style={{ marginBottom: '20px' }}>
@@ -4621,137 +5158,161 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
 
                 <button 
                   className="btn-primary" 
-                  style={{ width: '100%', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: '#E1306C' }}
-                  onClick={handlePublishInstagram}
-                  disabled={isPublishing}
-                >
-                  <IconSend size={16} />
-                  <span>{isPublishing ? 'Publishing to Instagram...' : 'Publish to Instagram Feed'}</span>
-                </button>
-              </div>
-
-              {/* Mobile Phone Mockup Preview */}
-              <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
-                  <IconSmartphone size={16} />
-                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Instagram Mobile Mockup</span>
-                </div>
-
-                <div 
                   style={{
-                    width: '320px',
-                    borderRadius: '24px',
-                    border: '8px solid #1E293B',
-                    background: '#FFFFFF',
-                    overflow: 'hidden',
-                    boxShadow: 'var(--shadow-modal)'
+                    width: '100%',
+                    padding: '12px 20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    background: fbTargetFormat === 'REEL' ? 'linear-gradient(135deg, #1877F2, #00C6FF)' : '#1877F2',
+                    boxShadow: '0 4px 14px rgba(24, 119, 242, 0.3)'
                   }}
-                >
-                  {/* Fake IG Header */}
-                  <div style={{ padding: '12px 14px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'linear-gradient(45deg, #F58529, #DD2A7B, #8134AF)' }} />
-                    <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>trend.contenter</span>
-                  </div>
-
-                  {/* Media */}
-                  <div style={{ width: '100%', height: '280px', background: '#0F172A' }}>
-                    {heroAsset?.url ? (
-                      heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4') ? (
-                        <video src={resolveImageSrc(heroAsset.url)} controls autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : (
-                        <img src={resolveImageSrc(heroAsset.base64 || heroAsset.url)} alt="IG preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      )
-                    ) : (
-                      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B', fontSize: '0.8rem' }}>No Artwork Selected</div>
-                    )}
-                  </div>
-
-                  {/* Fake Actions & Caption */}
-                  <div style={{ padding: '12px 14px' }}>
-                    <div style={{ display: 'flex', gap: '12px', marginBottom: '8px' }}>
-                      <span>❤️</span><span>💬</span><span>↗️</span>
-                    </div>
-                    <div style={{ fontSize: '0.82rem', lineHeight: 1.4 }}>
-                      <strong style={{ marginRight: '6px' }}>trend.contenter</strong>
-                      {instagramCaption ? `${instagramCaption.slice(0, 110)}...` : 'Your post caption will appear here.'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* CHANNEL 2: FACEBOOK PUBLISHER */}
-          {publishChannel === 'facebook' && (
-            <div className="grid-2">
-              {/* Copy Editor */}
-              <div className="glass-card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <h4 style={{ fontSize: '1rem', fontWeight: 600, margin: 0 }}>Facebook Page Post</h4>
-                  <button 
-                    type="button"
-                    className="btn-outline"
-                    style={{ padding: '4px 10px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                    onClick={() => copyToClipboard(facebookPostCopy, 'Facebook Post')}
-                  >
-                    <IconCopy size={12} />
-                    <span>Copy</span>
-                  </button>
-                </div>
-                <div style={{ marginBottom: '14px' }}>
-                  <label className="subheading-label">Post Caption &amp; Narrative</label>
-                  <textarea 
-                    className="input-glass"
-                    rows={8}
-                    value={facebookPostCopy}
-                    onChange={(e) => setFacebookPostCopy(e.target.value)}
-                    placeholder="Write your Facebook post..."
-                  />
-                </div>
-
-                <button 
-                  className="btn-primary" 
-                  style={{ width: '100%', padding: '12px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: '#1877F2' }}
                   onClick={handlePublishFacebook}
                   disabled={isPublishing}
                 >
-                  <IconSend size={16} />
-                  <span>{isPublishing ? 'Publishing to Facebook...' : 'Publish to Facebook Page'}</span>
+                  {fbTargetFormat === 'REEL' ? <IconVideo size={16} /> : <IconSend size={16} />}
+                  <span>
+                    {isPublishing
+                      ? 'Publishing to Facebook...'
+                      : fbTargetFormat === 'REEL'
+                      ? 'Publish Facebook Reel'
+                      : fbPostMediaType === 'VIDEO'
+                      ? 'Publish Video to Facebook Page'
+                      : 'Publish to Facebook Page'}
+                  </span>
                 </button>
               </div>
 
-              {/* Desktop Facebook Card Mockup */}
-              <div className="glass-card">
+              {/* Dynamic Live Mockup */}
+              <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
                   <IconMonitor size={16} />
-                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Facebook Feed Mockup</span>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                    Facebook {fbTargetFormat === 'REEL' ? 'Reel Preview' : (fbPostMediaType === 'VIDEO' ? 'Video Post Preview' : 'Feed Mockup')}
+                  </span>
                 </div>
 
-                <div style={{ background: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '16px', boxShadow: 'var(--shadow-card)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                    <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#1877F2', color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>TC</div>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>Trend Contenter Official</div>
-                      <div style={{ fontSize: '0.74rem', color: '#64748B' }}>Just now &bull; 🌐</div>
-                    </div>
-                  </div>
-
-                  <p style={{ fontSize: '0.88rem', color: '#1E293B', marginBottom: '12px', lineHeight: 1.5 }}>
-                    {facebookPostCopy ? facebookPostCopy.slice(0, 160) : 'Your Facebook update copy appears here...'}
-                  </p>
-
-                  <div style={{ width: '100%', height: '260px', background: '#0F172A', borderRadius: '6px', overflow: 'hidden' }}>
-                    {heroAsset?.url ? (
-                      heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4') ? (
-                        <video src={resolveImageSrc(heroAsset.url)} controls autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                {/* REEL MOCKUP */}
+                {fbTargetFormat === 'REEL' ? (
+                  <div 
+                    style={{
+                      width: '320px',
+                      height: '480px',
+                      borderRadius: '28px',
+                      border: '8px solid #1E293B',
+                      background: '#0F172A',
+                      overflow: 'hidden',
+                      boxShadow: 'var(--shadow-modal)',
+                      position: 'relative'
+                    }}
+                  >
+                    {/* Video/Image Background */}
+                    {fbCustomVideoUrl ? (
+                      <video src={fbCustomVideoUrl} autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : heroAsset?.url ? (
+                      heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4') || heroAsset.url.includes('.mp4') ? (
+                        <video src={resolveImageSrc(heroAsset.url)} autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       ) : (
-                        <img src={resolveImageSrc(heroAsset.base64 || heroAsset.url)} alt="FB preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <img src={resolveImageSrc(heroAsset.base64 || heroAsset.url)} alt="FB Reel preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       )
                     ) : (
-                      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}>No Artwork Selected</div>
+                      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}>Reel Preview</div>
                     )}
+
+                    {/* Top FB Reels Badge */}
+                    <div style={{ position: 'absolute', top: '14px', left: '14px', display: 'flex', alignItems: 'center', gap: '6px', color: '#FFFFFF', fontSize: '0.82rem', fontWeight: 700, textShadow: '0 2px 4px rgba(0,0,0,0.6)' }}>
+                      <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#1877F2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 800 }}>f</div>
+                      <span>Reels</span>
+                    </div>
+
+                    {/* Right Engagement Actions */}
+                    <div style={{ position: 'absolute', right: '12px', bottom: '60px', display: 'flex', flexDirection: 'column', gap: '14px', alignItems: 'center', color: '#FFFFFF', textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: '0.72rem' }}>
+                        <span style={{ fontSize: '1.25rem' }}>👍</span>
+                        <span>24.8K</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: '0.72rem' }}>
+                        <span style={{ fontSize: '1.25rem' }}>💬</span>
+                        <span>810</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', fontSize: '0.72rem' }}>
+                        <span style={{ fontSize: '1.25rem' }}>↗️</span>
+                        <span>Share</span>
+                      </div>
+                    </div>
+
+                    {/* Bottom Title & Caption Overlay */}
+                    <div style={{ position: 'absolute', bottom: '0', left: '0', right: '50px', padding: '16px 14px', background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%)', color: '#FFFFFF' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                        <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: '#1877F2', color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.75rem' }}>TC</div>
+                        <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Trend Contenter Official</span>
+                      </div>
+                      {fbVideoTitle && (
+                        <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '4px', color: '#60A5FA' }}>
+                          {fbVideoTitle}
+                        </div>
+                      )}
+                      <div style={{ fontSize: '0.78rem', lineHeight: 1.3, maxHeight: '42px', overflow: 'hidden' }}>
+                        {facebookPostCopy ? `${facebookPostCopy.slice(0, 85)}...` : 'Your Facebook Reel caption will appear here.'}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  /* DESKTOP FEED POST MOCKUP (PHOTO OR VIDEO) */
+                  <div style={{ width: '100%', maxWidth: '420px', background: '#FFFFFF', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '16px', boxShadow: 'var(--shadow-card)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                      <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: '#1877F2', color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>TC</div>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#0F172A' }}>Trend Contenter Official</div>
+                        <div style={{ fontSize: '0.74rem', color: '#64748B' }}>Just now &bull; 🌐</div>
+                      </div>
+                    </div>
+
+                    {fbPostMediaType === 'VIDEO' && fbVideoTitle && (
+                      <h5 style={{ margin: '0 0 6px 0', fontSize: '0.95rem', fontWeight: 700, color: '#1E293B' }}>
+                        {fbVideoTitle}
+                      </h5>
+                    )}
+
+                    <p style={{ fontSize: '0.88rem', color: '#1E293B', marginBottom: '12px', lineHeight: 1.5 }}>
+                      {facebookPostCopy ? facebookPostCopy.slice(0, 160) : 'Your Facebook update copy appears here...'}
+                    </p>
+
+                    <div style={{ width: '100%', height: '240px', background: '#0F172A', borderRadius: '8px', overflow: 'hidden', position: 'relative' }}>
+                      {fbPostMediaType === 'VIDEO' && fbCustomVideoUrl ? (
+                        <video src={fbCustomVideoUrl} controls style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      ) : heroAsset?.url ? (
+                        heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4') || heroAsset.url.includes('.mp4') ? (
+                          <video
+                            src={resolveImageSrc(heroAsset.url)}
+                            autoPlay
+                            loop
+                            muted
+                            playsInline
+                            controls
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        ) : (
+                          <img src={resolveImageSrc(heroAsset.base64 || heroAsset.url)} alt="FB preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        )
+                      ) : (
+                        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748B' }}>No Artwork Selected</div>
+                      )}
+                      {fbPostMediaType === 'VIDEO' && !fbCustomVideoUrl && (!heroAsset?.url || (heroAsset.media_type !== 'video' && !heroAsset.url.endsWith('.mp4') && !heroAsset.url.includes('.mp4'))) && (
+                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)' }}>
+                          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(255,255,255,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', color: '#1877F2' }}>▶</div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid #F1F5F9', color: '#64748B', fontSize: '0.82rem', fontWeight: 600 }}>
+                      <span>👍 Like</span>
+                      <span>💬 Comment</span>
+                      <span>↗️ Share</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

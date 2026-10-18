@@ -54,6 +54,20 @@ def _extract_video_data(data: Any) -> Tuple[Optional[bytes], Optional[str]]:
     return None, None
 
 
+# Size mapping based on aspect ratio and resolution for Veo
+_VEO_SIZE_BY_RESOLUTION = {
+    "720p": {"16:9": "1280x720", "9:16": "720x1280", "1:1": "720x720"},
+    "1080p": {"16:9": "1920x1080", "9:16": "1080x1920", "1:1": "1080x1080"},
+    "4k": {"16:9": "3840x2160", "9:16": "2160x3840", "1:1": "2160x2160"},
+}
+
+def _veo_video_size(aspect_ratio: str, resolution: Optional[str] = None) -> str:
+    """Return the WxH size LiteLLM and Veo expect for a resolution and aspect ratio."""
+    resolution_key = (resolution or "720p").lower()
+    sizes = _VEO_SIZE_BY_RESOLUTION.get(resolution_key, _VEO_SIZE_BY_RESOLUTION["720p"])
+    return sizes.get(aspect_ratio, sizes.get("16:9", "1280x720"))
+
+
 class VeoVideoService:
     def __init__(self):
         pass
@@ -85,9 +99,16 @@ class VeoVideoService:
             logger.warning(f"Failed to enhance video prompt with Gemini ({e}); using original prompt.")
             return prompt
 
-    def _generate_video_via_sdk(self, req: GenerateVideoRequest, model_name: str, final_prompt: str, dest_path: Path) -> None:
+    def _generate_video_via_sdk(
+        self,
+        req: GenerateVideoRequest,
+        model_name: str,
+        final_prompt: str,
+        dest_path: Path,
+        client_override: Optional[genai.Client] = None,
+    ) -> None:
         """Uses client.models.generate_videos if supported by the installed google-genai version."""
-        client = self._get_client(req.api_key, getattr(req, "base_url", None))
+        client = client_override or self._get_client(req.api_key, getattr(req, "base_url", None))
         if not hasattr(client.models, "generate_videos"):
             raise AttributeError("Installed google-genai SDK does not have 'generate_videos' method on client.models")
 
@@ -169,141 +190,90 @@ class VeoVideoService:
         if not dest_path.exists() or dest_path.stat().st_size == 0:
             raise RuntimeError("Could not save Veo video file to disk from SDK response.")
 
-    def _generate_video_via_rest(self, req: GenerateVideoRequest, model_name: str, final_prompt: str, dest_path: Path) -> None:
+    def _generate_video_via_gateway(
+        self,
+        req: GenerateVideoRequest,
+        model_name: str,
+        final_prompt: str,
+        gateway_url: str,
+        gateway_token: str,
+        dest_path: Path,
+    ) -> None:
         """
-        Calls Google Veo or LiteLLM gateway directly via HTTP REST :predictLongRunning endpoint.
-        Polls until the long-running operation finishes and writes the resulting MP4.
+        Submits video generation job to an LLM Gateway (LiteLLM /v1/videos) with polling
+        and direct binary video content download (/v1/videos/{op_id}/content).
         """
-        token = (
-            req.api_key
-            or settings.GEMINI_API_KEY
-            or settings.LLM_GATEWAY_TOKEN
-            or os.environ.get("GEMINI_API_KEY")
-            or os.environ.get("LLM_GATEWAY_TOKEN")
-            or ""
-        ).strip()
+        base_url = gateway_url.rstrip("/")
+        litellm_url = f"{base_url}/v1/videos"
 
-        gemini_key = (
-            getattr(req, "api_key", None)
-            or settings.GEMINI_API_KEY
-            or os.environ.get("GEMINI_API_KEY")
-            or ""
-        ).strip()
-
-        token = gemini_key or (
-            settings.LLM_GATEWAY_TOKEN
-            or os.environ.get("LLM_GATEWAY_TOKEN")
-            or ""
-        ).strip()
-
-        explicit_base_url = (getattr(req, "base_url", None) or settings.GEMINI_BASE_URL or "").strip()
-        target_base_url = (
-            explicit_base_url
-            or ("" if gemini_key else (settings.LLM_GATEWAY_BASE_URL or os.environ.get("LLM_GATEWAY_BASE_URL") or ""))
-        ).strip()
-
-        if not token:
-            raise ValueError("API key or Gateway token is missing for Veo video generation.")
-
-        auth_token = token
+        auth_token = gateway_token.strip()
         auth_header = auth_token if auth_token.startswith("Bearer ") else f"Bearer {auth_token}"
-
         headers = {
             "Authorization": auth_header,
-            "x-goog-api-key": token,
             "Content-Type": "application/json",
         }
 
+        resolution = (getattr(req, "resolution", "720p") or "720p").lower()
         aspect_ratio = req.aspect_ratio if req.aspect_ratio in ["16:9", "9:16", "1:1"] else "16:9"
-        # Google Veo requires discrete duration seconds: 4, 6, or 8
-        raw_dur = req.duration_seconds or 6
-        if raw_dur <= 4:
-            duration_seconds = 4
-        elif raw_dur <= 6:
-            duration_seconds = 6
-        else:
-            duration_seconds = 8
+        video_size = _veo_video_size(aspect_ratio, resolution)
 
-        # Build instance payload following Google Veo predictLongRunning schema
-        instance: Dict[str, Any] = {"prompt": final_prompt}
-        if req.image_base64:
-            src_bytes, src_mime = clean_base64_string(req.image_base64)
-            instance["image"] = {
-                "bytesBase64Encoded": base64.b64encode(src_bytes).decode("utf-8"),
-                "mimeType": src_mime or "image/png"
-            }
-
-        payload = {
-            "instances": [instance],
-            "parameters": {
-                "sampleCount": 1,
-                "aspectRatio": aspect_ratio,
-                "durationSeconds": duration_seconds,
-            }
+        extra_body: Dict[str, Any] = {
+            "sampleCount": 1,
+            "generateAudio": getattr(req, "generate_audio", False),
+            "personGeneration": getattr(req, "person_generation", "allow_all") or "allow_all",
+            "enhancePrompt": getattr(req, "enhance_prompt", True),
+            "seed": 42,
+            "aspectRatio": aspect_ratio,
+            "resolution": resolution,
         }
 
-        # Build candidate URLs
-        candidate_urls: List[str] = []
-        if target_base_url:
-            clean_base = target_base_url.rstrip("/")
-            if clean_base.endswith("/v1beta"):
-                candidate_urls.append(f"{clean_base}/models/{model_name}:predictLongRunning")
-            else:
-                candidate_urls.append(f"{clean_base}/v1beta/models/{model_name}:predictLongRunning")
-                candidate_urls.append(f"{clean_base}/models/{model_name}:predictLongRunning")
-                candidate_urls.append(f"{clean_base}/gemini/v1beta/models/{model_name}:predictLongRunning")
-        else:
-            candidate_urls.append(f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:predictLongRunning")
+        payload: Dict[str, Any] = {
+            "model": model_name,
+            "prompt": final_prompt,
+            "size": video_size,
+            "resolution": resolution,
+            "negative_prompt": getattr(req, "negative_prompt", "No violence") or "No violence",
+            "seconds": req.duration_seconds,
+            "extra_body": extra_body,
+        }
 
-        logger.info(f"Initiating Veo video generation via REST with model '{model_name}'...")
+        if req.image_base64:
+            src_bytes, src_mime = clean_base64_string(req.image_base64)
+            payload["input_reference"] = {
+                "mimeType": src_mime or "image/png",
+                "bytesBase64Encoded": base64.b64encode(src_bytes).decode("ascii"),
+            }
 
-        last_error = None
-        op_data: Optional[Dict[str, Any]] = None
-        successful_base_url: Optional[str] = None
+        logger.info(
+            f"Submitting Veo video generation to LLM Gateway: {litellm_url} "
+            f"(model: {model_name}, size: {video_size}, duration: {req.duration_seconds}s)"
+        )
 
         with httpx.Client(timeout=httpx.Timeout(120.0, connect=30.0)) as http_client:
-            for endpoint_url in candidate_urls:
+            # 1. Post to initiate video generation
+            resp = None
+            for attempt in range(1, 4):
                 try:
-                    logger.info(f"Trying Veo predictLongRunning endpoint: {endpoint_url}")
-                    resp = http_client.post(endpoint_url, headers=headers, json=payload)
+                    resp = http_client.post(litellm_url, headers=headers, json=payload)
                     if resp.status_code in (200, 201, 202):
-                        op_data = resp.json()
-                        successful_base_url = endpoint_url.split("/models/")[0]
                         break
-                    else:
-                        last_error = f"HTTP {resp.status_code} from {endpoint_url}: {resp.text}"
-                        logger.warning(f"Endpoint {endpoint_url} returned: {last_error[:300]}")
+                    logger.warning(f"Gateway POST attempt {attempt} returned HTTP {resp.status_code}: {resp.text[:300]}")
                 except Exception as ex:
-                    last_error = str(ex)
-                    logger.warning(f"Failed connecting to {endpoint_url}: {ex}")
+                    logger.warning(f"Gateway POST attempt {attempt} failed: {ex}")
+                    if attempt == 3:
+                        raise RuntimeError(f"Failed to submit Veo job to LLM Gateway ({litellm_url}): {ex}") from ex
+                    time.sleep(2)
 
-            # If predictLongRunning candidates failed, check LiteLLM /v1/videos endpoint
-            if not op_data and target_base_url:
-                litellm_url = f"{target_base_url.rstrip('/')}/v1/videos"
-                litellm_payload = {
-                    "model": model_name,
-                    "prompt": final_prompt,
-                    "seconds": duration_seconds,
-                    "aspect_ratio": aspect_ratio
-                }
-                try:
-                    logger.info(f"Trying LiteLLM video endpoint: {litellm_url}")
-                    resp = http_client.post(litellm_url, headers=headers, json=litellm_payload)
-                    if resp.status_code in (200, 201, 202):
-                        op_data = resp.json()
-                        successful_base_url = target_base_url.rstrip("/")
-                    else:
-                        last_error = f"HTTP {resp.status_code} from {litellm_url}: {resp.text}"
-                except Exception as ex:
-                    last_error = str(ex)
+            if not resp or resp.status_code not in (200, 201, 202):
+                err_text = resp.text if resp else "No response"
+                raise RuntimeError(f"LLM Gateway returned HTTP {resp.status_code if resp else 'N/A'}: {err_text}")
 
-            if not op_data:
-                raise RuntimeError(f"Veo initiation request failed on all candidate endpoints. Last error: {last_error}")
+            resp_data = resp.json()
+            op_id = resp_data.get("id") or resp_data.get("video_id") or resp_data.get("name")
 
-            op_name = op_data.get("name") or op_data.get("id")
-            if not op_name:
-                # Some endpoints immediately return the completed video
-                video_bytes, video_url = _extract_video_data(op_data)
+            if not op_id:
+                # Direct completed video returned immediately in payload
+                video_bytes, video_url = _extract_video_data(resp_data)
                 if video_bytes:
                     with open(dest_path, "wb") as f:
                         f.write(video_bytes)
@@ -313,82 +283,246 @@ class VeoVideoService:
                     with open(dest_path, "wb") as f:
                         f.write(v_resp.content)
                     return
-                raise RuntimeError(f"Unexpected Veo initiation response without operation name or video data: {op_data}")
+                raise RuntimeError(f"LLM Gateway response contained no operation ID or video data: {resp_data}")
 
-            logger.info(f"Veo operation '{op_name}' started. Polling for completion...")
-
-            # Determine polling URL
-            if op_name.startswith(("http://", "https://")):
-                poll_url = op_name
-            elif successful_base_url:
-                clean_succ = successful_base_url.rstrip("/")
-                if op_name.startswith("/"):
-                    poll_url = f"{clean_succ}{op_name}"
-                else:
-                    poll_url = f"{clean_succ}/{op_name}"
-            else:
-                poll_url = f"https://generativelanguage.googleapis.com/v1beta/{op_name.lstrip('/')}"
+            # 2. Poll until operation status is completed
+            operation_url = f"{base_url}/v1/videos/{op_id}"
+            logger.info(f"Veo job submitted (operation_id: {op_id}). Polling status at {operation_url}...")
 
             elapsed = 0
-            max_wait_seconds = 300
+            max_wait_seconds = 360
             poll_interval = 8
-            final_resp_data: Optional[Dict[str, Any]] = None
+            final_poll_data = None
 
             while elapsed < max_wait_seconds:
                 time.sleep(poll_interval)
                 elapsed += poll_interval
 
-                poll_resp = http_client.get(poll_url, headers=headers)
+                try:
+                    poll_resp = http_client.get(operation_url, headers=headers)
+                    if poll_resp.status_code != 200:
+                        logger.warning(f"Gateway polling HTTP {poll_resp.status_code}: {poll_resp.text[:200]}")
+                        continue
+                    data = poll_resp.json()
+                    status = (data.get("status") or "").lower()
+
+                    if status in ["completed", "succeeded", "ready"]:
+                        logger.info(f"Gateway Veo operation '{op_id}' completed in {elapsed}s.")
+                        final_poll_data = data
+                        break
+                    elif status in ["failed", "error"]:
+                        error_payload = data.get("error", {})
+                        error_message = error_payload.get("message") if isinstance(error_payload, dict) else str(error_payload)
+                        raise RuntimeError(f"LLM Gateway Veo generation failed: {error_message}")
+                    else:
+                        logger.info(f"Veo operation '{op_id}' status: {status or 'processing'} ({elapsed}s elapsed)")
+                except RuntimeError:
+                    raise
+                except Exception as poll_ex:
+                    logger.warning(f"Error during operation poll: {poll_ex}")
+
+            if not final_poll_data:
+                raise TimeoutError(f"LLM Gateway Veo generation timed out after {max_wait_seconds} seconds.")
+
+            # 3. Retrieve video stream from /content endpoint
+            content_url = f"{base_url}/v1/videos/{op_id}/content"
+            logger.info(f"Downloading generated video stream from {content_url}...")
+
+            content_saved = False
+            try:
+                content_resp = http_client.get(content_url, headers=headers)
+                if content_resp.status_code == 200 and len(content_resp.content) > 1000:
+                    with open(dest_path, "wb") as f:
+                        f.write(content_resp.content)
+                    content_saved = True
+            except Exception as dl_ex:
+                logger.warning(f"Direct /content download unsuccessful: {dl_ex}. Checking poll payload...")
+
+            if not content_saved:
+                # Check if polling response had the video bytes or URI
+                video_bytes, video_url = _extract_video_data(final_poll_data)
+                if video_bytes:
+                    with open(dest_path, "wb") as f:
+                        f.write(video_bytes)
+                    content_saved = True
+                elif video_url:
+                    v_resp = http_client.get(video_url, headers=headers)
+                    if v_resp.status_code == 200:
+                        with open(dest_path, "wb") as f:
+                            f.write(v_resp.content)
+                        content_saved = True
+
+            if not dest_path.exists() or dest_path.stat().st_size == 0:
+                raise RuntimeError("Failed to retrieve or save generated Veo video from LLM Gateway.")
+
+    def _generate_video_via_gemini_key(
+        self,
+        req: GenerateVideoRequest,
+        model_name: str,
+        final_prompt: str,
+        gemini_key: str,
+        dest_path: Path,
+    ) -> None:
+        """
+        Generates video using a direct Google Gemini API Key.
+        Tries google-genai SDK models.generate_videos first; falls back to
+        direct Google AI REST predictLongRunning endpoint.
+        """
+        # 1. Try google-genai SDK if available
+        try:
+            client = self._get_client(api_key_override=gemini_key)
+            if hasattr(client.models, "generate_videos"):
+                self._generate_video_via_sdk(req, model_name, final_prompt, dest_path, client_override=client)
+                if dest_path.exists() and dest_path.stat().st_size > 0:
+                    return
+        except Exception as sdk_err:
+            logger.info(f"SDK generate_videos not supported or failed ({sdk_err}). Using Google AI REST predictLongRunning.")
+
+        # 2. Direct Google AI REST predictLongRunning
+        endpoint_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:predictLongRunning"
+        headers = {
+            "x-goog-api-key": gemini_key,
+            "Content-Type": "application/json",
+        }
+
+        aspect_ratio = req.aspect_ratio if req.aspect_ratio in ["16:9", "9:16", "1:1"] else "16:9"
+        raw_dur = req.duration_seconds or 6
+        duration_seconds = 4 if raw_dur <= 4 else (6 if raw_dur <= 6 else 8)
+
+        instance: Dict[str, Any] = {"prompt": final_prompt}
+        if req.image_base64:
+            src_bytes, src_mime = clean_base64_string(req.image_base64)
+            instance["image"] = {
+                "bytesBase64Encoded": base64.b64encode(src_bytes).decode("ascii"),
+                "mimeType": src_mime or "image/png"
+            }
+
+        payload = {
+            "instances": [instance],
+            "parameters": {
+                "sampleCount": 1,
+                "aspectRatio": aspect_ratio,
+                "durationSeconds": duration_seconds,
+                "personGeneration": getattr(req, "person_generation", "allow_all") or "allow_all"
+            }
+        }
+
+        logger.info(f"Submitting Veo predictLongRunning to Google AI ({endpoint_url})...")
+        with httpx.Client(timeout=httpx.Timeout(120.0, connect=30.0)) as http_client:
+            resp = http_client.post(
+                endpoint_url,
+                params={"key": gemini_key},
+                headers=headers,
+                json=payload
+            )
+            if resp.status_code not in (200, 201, 202):
+                raise RuntimeError(f"Google AI Veo initiation returned HTTP {resp.status_code}: {resp.text}")
+
+            op_data = resp.json()
+            op_name = op_data.get("name")
+            if not op_name:
+                video_bytes, video_url = _extract_video_data(op_data)
+                if video_bytes:
+                    with open(dest_path, "wb") as f:
+                        f.write(video_bytes)
+                    return
+                elif video_url:
+                    v_resp = http_client.get(video_url, params={"key": gemini_key}, headers=headers)
+                    with open(dest_path, "wb") as f:
+                        f.write(v_resp.content)
+                    return
+                raise RuntimeError(f"Unexpected Google AI response without operation name: {op_data}")
+
+            # Polling
+            poll_url = f"https://generativelanguage.googleapis.com/v1beta/{op_name.lstrip('/')}"
+            logger.info(f"Polling Google AI Veo operation: {op_name}...")
+
+            elapsed = 0
+            max_wait_seconds = 360
+            poll_interval = 8
+            final_data = None
+
+            while elapsed < max_wait_seconds:
+                time.sleep(poll_interval)
+                elapsed += poll_interval
+
+                poll_resp = http_client.get(poll_url, params={"key": gemini_key}, headers=headers)
                 if poll_resp.status_code != 200:
-                    logger.warning(f"Polling '{poll_url}' returned HTTP {poll_resp.status_code}: {poll_resp.text[:200]}")
+                    logger.warning(f"Google AI polling HTTP {poll_resp.status_code}: {poll_resp.text[:200]}")
                     continue
 
                 res_json = poll_resp.json()
-                is_done = res_json.get("done") is True or res_json.get("status") in ("completed", "succeeded")
-                if is_done:
+                if res_json.get("done") is True:
                     if "error" in res_json:
                         err = res_json["error"]
                         err_msg = err.get("message") if isinstance(err, dict) else str(err)
-                        raise RuntimeError(f"Veo operation error: {err_msg}")
-                    final_resp_data = res_json
+                        raise RuntimeError(f"Google AI Veo error: {err_msg}")
+                    final_data = res_json
                     break
-                logger.info(f"Veo operation '{op_name}' still generating... ({elapsed}s elapsed)")
+                logger.info(f"Google AI Veo operation '{op_name}' still generating... ({elapsed}s elapsed)")
 
-            if not final_resp_data:
-                raise TimeoutError(f"Veo video generation timed out after {max_wait_seconds} seconds.")
+            if not final_data:
+                raise TimeoutError(f"Google AI Veo generation timed out after {max_wait_seconds} seconds.")
 
-            # Extract video from final response data
-            video_bytes, video_uri = _extract_video_data(final_resp_data)
+            video_bytes, video_uri = _extract_video_data(final_data)
             if video_bytes:
                 with open(dest_path, "wb") as f:
                     f.write(video_bytes)
             elif video_uri:
-                logger.info(f"Downloading Veo video from URI: {video_uri}")
-                v_resp = http_client.get(video_uri, headers=headers)
+                logger.info(f"Downloading Veo video from Google URI: {video_uri}")
+                v_resp = http_client.get(video_uri, params={"key": gemini_key}, headers=headers)
                 if v_resp.status_code != 200:
                     raise RuntimeError(f"Failed to download video from {video_uri}: HTTP {v_resp.status_code}")
                 with open(dest_path, "wb") as f:
                     f.write(v_resp.content)
             else:
-                raise RuntimeError(f"Could not extract video bytes or URL from completed Veo response: {final_resp_data}")
+                raise RuntimeError(f"Could not extract video bytes or URL from Google AI response: {final_data}")
 
             if not dest_path.exists() or dest_path.stat().st_size == 0:
                 raise RuntimeError("Saved Veo video file is empty or missing from disk.")
 
     def generate_video(self, req: GenerateVideoRequest) -> GenerateVideoResponse:
         """
-        Generates videos exclusively with Google Veo.
+        Generates videos with Google Veo.
         Supports both text-to-video and image-to-video.
-        Uses native google-genai SDK when available, with automatic REST predictLongRunning fallback.
+        Routes to:
+          1. Custom LLM Gateway (/v1/videos) if gateway base URL & token are provided or configured.
+          2. Direct Google Gemini Key (SDK generate_videos or REST predictLongRunning) if GEMINI_API_KEY is configured.
+          3. Automatic fallback between both live providers if available.
+          4. Verified demo preview fallback if all live credentials are absent or fail.
         """
         model_name = req.model or settings.VEO_MODEL or "veo-2.0-generate-001"
-        base_url = getattr(req, "base_url", None)
+
+        # 1. Resolve Gateway credentials
+        gateway_url = (
+            getattr(req, "base_url", None)
+            or os.getenv("LLM_GATEWAY_URL")
+            or settings.get_llm_gateway_url()
+            or os.getenv("LLM_GATEWAY_BASE_URL")
+            or ""
+        ).strip().rstrip("/")
+
+        gateway_token = (
+            getattr(req, "token", None)
+            or (req.api_key if getattr(req, "base_url", None) else None)
+            or os.getenv("LLM_GATEWAY_TOKEN")
+            or settings.LLM_GATEWAY_TOKEN
+            or ""
+        ).strip()
+
+        # 2. Resolve direct Gemini key
+        gemini_key = (
+            (req.api_key if not getattr(req, "base_url", None) else None)
+            or settings.GEMINI_API_KEY
+            or os.getenv("GEMINI_API_KEY")
+            or ""
+        ).strip()
 
         final_prompt = req.prompt.strip()
         enhanced_text = None
         if req.enhance_prompt:
             try:
-                enhanced_text = self.enhance_video_prompt(req.prompt, api_key=req.api_key, base_url=base_url)
+                enhanced_text = self.enhance_video_prompt(req.prompt, api_key=gemini_key, base_url=gateway_url)
                 final_prompt = enhanced_text
             except Exception:
                 pass
@@ -397,27 +531,62 @@ class VeoVideoService:
         dest_filename = f"{video_id}.mp4"
         dest_path = settings.CONTENT_STUDIO_MEDIA_DIR / dest_filename
 
-        try:
-            # 1. Try SDK if client.models has generate_videos
-            sdk_succeeded = False
-            try:
-                self._generate_video_via_sdk(req, model_name, final_prompt, dest_path)
-                sdk_succeeded = True
-            except (AttributeError, NotImplementedError) as sdk_err:
-                logger.info(f"Google GenAI SDK does not support generate_videos directly ({sdk_err}). Using REST predictLongRunning.")
-            except Exception as e:
-                # If SDK method failed because of missing attribute or type error, fallback to REST
-                if "'Models' object has no attribute 'generate_videos'" in str(e) or "GenerateVideos" in str(e):
-                    logger.info("Falling back to Veo REST predictLongRunning pipeline.")
-                else:
-                    raise
+        # Determine primary mode:
+        # If the caller explicitly supplied base_url, or if gateway credentials are fully configured and no direct Gemini key is given:
+        use_gateway_first = bool(getattr(req, "base_url", None)) or (bool(gateway_url and gateway_token) and not gemini_key)
 
-            # 2. If SDK was not used, run REST predictLongRunning pipeline
-            if not sdk_succeeded:
-                self._generate_video_via_rest(req, model_name, final_prompt, dest_path)
+        generation_error = None
 
+        if use_gateway_first:
+            # Try Gateway first
+            if gateway_url and gateway_token:
+                try:
+                    logger.info("Routing Veo generation to LLM Gateway...")
+                    self._generate_video_via_gateway(req, model_name, final_prompt, gateway_url, gateway_token, dest_path)
+                    generation_error = None
+                except Exception as ex:
+                    logger.warning(f"LLM Gateway Veo generation failed ({ex}).")
+                    generation_error = ex
+            else:
+                generation_error = RuntimeError("LLM Gateway URL or token missing.")
+
+            # Fallback to direct Gemini key if available
+            if generation_error and gemini_key:
+                try:
+                    logger.info("Attempting fallback to direct Gemini API key for Veo generation...")
+                    self._generate_video_via_gemini_key(req, model_name, final_prompt, gemini_key, dest_path)
+                    generation_error = None
+                except Exception as fb_ex:
+                    logger.warning(f"Gemini key fallback also failed ({fb_ex}).")
+                    generation_error = fb_ex
+
+        else:
+            # Try direct Gemini key first
+            if gemini_key:
+                try:
+                    logger.info("Routing Veo generation to Google AI with GEMINI_API_KEY...")
+                    self._generate_video_via_gemini_key(req, model_name, final_prompt, gemini_key, dest_path)
+                    generation_error = None
+                except Exception as ex:
+                    logger.warning(f"Gemini key Veo generation failed ({ex}).")
+                    generation_error = ex
+            else:
+                generation_error = RuntimeError("GEMINI_API_KEY missing.")
+
+            # Fallback to Gateway if available
+            if generation_error and gateway_url and gateway_token:
+                try:
+                    logger.info("Attempting fallback to LLM Gateway for Veo generation...")
+                    self._generate_video_via_gateway(req, model_name, final_prompt, gateway_url, gateway_token, dest_path)
+                    generation_error = None
+                except Exception as gw_ex:
+                    logger.warning(f"Gateway fallback also failed ({gw_ex}).")
+                    generation_error = gw_ex
+
+        # If video was successfully generated and saved to disk
+        if not generation_error and dest_path.exists() and dest_path.stat().st_size > 0:
             file_url = f"/api/v1/content-studio/media/{dest_filename}"
-
+            provider_tag = "LLM Gateway" if use_gateway_first else "Google GenAI"
             return GenerateVideoResponse(
                 id=video_id,
                 video_url=file_url,
@@ -427,26 +596,26 @@ class VeoVideoService:
                 aspect_ratio=req.aspect_ratio,
                 duration_seconds=req.duration_seconds,
                 fps=req.fps,
-                model_used=model_name,
+                model_used=f"{model_name} ({provider_tag})",
                 status="completed"
             )
 
-        except Exception as e:
-            logger.warning(f"Live Veo video generation endpoint not routed by gateway ({e}). Serving verified preview fallback.")
-            sample_url = get_demo_video_url(req.prompt)
+        # Demo fallback
+        logger.warning(f"Live Veo video generation unavailable ({generation_error}). Serving verified preview fallback.")
+        sample_url = get_demo_video_url(req.prompt)
 
-            return GenerateVideoResponse(
-                id=video_id,
-                video_url=sample_url,
-                video_uri=f"demo://{sample_url}",
-                prompt=req.prompt,
-                enhanced_prompt=f"[Demo Preview - {e}] {final_prompt}",
-                aspect_ratio=req.aspect_ratio,
-                duration_seconds=req.duration_seconds,
-                fps=req.fps,
-                model_used=f"{model_name} (Demo Preview)",
-                status="completed_fallback"
-            )
+        return GenerateVideoResponse(
+            id=video_id,
+            video_url=sample_url,
+            video_uri=f"demo://{sample_url}",
+            prompt=req.prompt,
+            enhanced_prompt=f"[Demo Preview - {generation_error}] {final_prompt}",
+            aspect_ratio=req.aspect_ratio,
+            duration_seconds=req.duration_seconds,
+            fps=req.fps,
+            model_used=f"{model_name} (Demo Preview)",
+            status="completed_fallback"
+        )
 
 
 veo_service = VeoVideoService()

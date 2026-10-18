@@ -41,9 +41,13 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
     GEMINI_BASE_URL: str = ""
+    LLM_GATEWAY_URL: str = ""
     LLM_GATEWAY_BASE_URL: str = ""
     LLM_GATEWAY_TOKEN: str = ""
     ANTHROPIC_API_KEY: str = ""
+
+    def get_llm_gateway_url(self) -> str:
+        return (self.LLM_GATEWAY_URL or self.LLM_GATEWAY_BASE_URL or "").strip()
     
     LLM_PROBE_MAX_QUERIES: int = 4
     LLM_REQUEST_TIMEOUT_SECONDS: int = 30

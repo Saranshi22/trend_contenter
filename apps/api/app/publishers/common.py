@@ -31,15 +31,15 @@ DEFAULT_RETRY_BACKOFF_BASE_SECONDS = 0.5
 DEFAULT_RETRY_BACKOFF_MAX_SECONDS = 8.0
 RETRYABLE_STATUS_CODES = {408, 425, 429, 500, 502, 503, 504}
 SIGNED_IMAGE_UPLOAD_ENDPOINT = os.getenv(
-    "SOCIAL_IMAGE_PROXY_UPLOAD_URL", "https://bodhi-vision-img-api.dev.psbodhi.live//api/v1/upload/image"
+    "SOCIAL_IMAGE_PROXY_UPLOAD_URL", ""
 )
 SIGNED_IMAGE_STORAGE_PROVIDER = os.getenv("SOCIAL_IMAGE_PROXY_STORAGE_PROVIDER", "aws")
-SIGNED_IMAGE_PROXY_BEARER_TOKEN = os.getenv("SOCIAL_IMAGE_PROXY_BEARER_TOKEN", "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJ6YjhxdWJ0My0xZmlnRnc0NDBJVHlZX1JuZGQxd1poX3ZzYVVhYWxhaVdRIn0.eyJleHAiOjE3Nzk2OTAxMjIsImlhdCI6MTc3NDUwNjEyMiwianRpIjoib25ydHJvOmUxYzMxZjIzLTBhYTYtOWIxYy1jNTIwLTNhNzQ2M2IwMzRjOSIsImlzcyI6Imh0dHBzOi8vYXV0aC5kZXYucHNib2RoaS5saXZlL3JlYWxtcy9Cb2RoaUFjY2VzcyIsImF1ZCI6ImFjY291bnQiLCJzdWIiOiI1NWNjOTY2Zi05OGI1LTRhZjItYWJjNi03ZjAwMzdmOWM4ZmMiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJib2RoaS1nZW5lcmFsLWFjY2VzcyIsInNpZCI6IjFkYzIxZGU3LWVlOTgtNDg3Ny04MDI5LTljOWJhNmE2YzMzYyIsImFjciI6IjEiLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiIsImRlZmF1bHQtcm9sZXMtYm9kaGlhY2Nlc3MiXX0sInJlc291cmNlX2FjY2VzcyI6eyJhY2NvdW50Ijp7InJvbGVzIjpbIm1hbmFnZS1hY2NvdW50IiwibWFuYWdlLWFjY291bnQtbGlua3MiLCJ2aWV3LXByb2ZpbGUiXX19LCJzY29wZSI6InByb2ZpbGUgZW1haWwiLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwibmFtZSI6IkRoYWxhZGh1bGlzYWluYWdhc2FudG9zaCBEaGFsYWRodWxpc2FpbmFnYXNhbnRvc2giLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJkaGFsYWRodWxpc2FpbmFnYXNhbnRvc2hAcHVibGljaXNzYXBpZW50LmNvbSIsImdpdmVuX25hbWUiOiJEaGFsYWRodWxpc2FpbmFnYXNhbnRvc2giLCJmYW1pbHlfbmFtZSI6IkRoYWxhZGh1bGlzYWluYWdhc2FudG9zaCIsImRhaWx5X2xpbWl0IjoxMDAwLCJlbWFpbCI6ImRoYWxhZGh1bGlzYWluYWdhc2FudG9zaEBwdWJsaWNpc3NhcGllbnQuY29tIn0.Uj4oGljfVtPmnFc0Qz4yZP5IFWJp5FQj8KXt2V_9oLl21DqZ8PgmBo5q8ttzQRK0Lyyz-OYB-F6Aj0EyG-OYUXVMfppM8Ql5mz2DS3i_9IP7B0oijNElocl6tZMJjjDujsggyO86x-Kr6DpXnXtj5N5MBk_I2rgU_fpRSdZ52_JXUTWhUU2xXowPb4ImTQQJ7242JrqIYQDfIrgoqoliWBNF2kU9eigKzfEUqCS5PwTihL_Mb6fdys3v--8_zh7VPRp0jEY7VxllsPNBwLABmWOoX5NZu4ecXDTeAIme3kNJMzqCoBYfrNVMTZRmc26RwnT_71VEytiUZHw46BNfIA").strip()
+SIGNED_IMAGE_PROXY_BEARER_TOKEN = os.getenv("SOCIAL_IMAGE_PROXY_BEARER_TOKEN", "").strip()
 SIGNED_IMAGE_URL_EXPIRATION_SECONDS = int(
     os.getenv("SOCIAL_IMAGE_PROXY_SIGNED_URL_EXPIRATION", "3600")
 )
 SIGNED_IMAGE_PROXY_TIMEOUT_SECONDS = float(os.getenv("SOCIAL_IMAGE_PROXY_TIMEOUT_SECONDS", "30"))
-SIGNED_IMAGE_PROXY_ENABLED = os.getenv("SOCIAL_IMAGE_PROXY_ENABLED", "true").strip().lower() in {
+SIGNED_IMAGE_PROXY_ENABLED = os.getenv("SOCIAL_IMAGE_PROXY_ENABLED", "false").strip().lower() in {
     "1",
     "true",
     "yes",
@@ -324,7 +324,7 @@ def resolve_provider_signed_image_url(
     retry_policy: RetryPolicy | None = None,
 ) -> str:
     """Resolve source image URL to provider-signed URL through upload API."""
-    if not SIGNED_IMAGE_PROXY_ENABLED:
+    if not SIGNED_IMAGE_PROXY_ENABLED or not SIGNED_IMAGE_UPLOAD_ENDPOINT:
         return image_url
     if not SIGNED_IMAGE_PROXY_BEARER_TOKEN:
         raise ValueError(
@@ -451,4 +451,105 @@ def load_image_bytes(
         )
 
     raise ValueError(f"Could not load image bytes from source: '{cleaned[:100]}'")
+
+
+def load_media_bytes(
+    media_ref: str | bytes,
+    *,
+    timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+    max_bytes: int | None = None,
+) -> tuple[bytes, str, str]:
+    """
+    Universally loads binary media bytes (image or video) and detects MIME type and kind.
+    Returns: (bytes, mime_type, kind) where kind is 'image' or 'video'.
+    """
+    if isinstance(media_ref, bytes):
+        sniffed = sniff_image_subtype(media_ref)
+        if sniffed:
+            return media_ref, f"image/{sniffed}", "image"
+        if len(media_ref) > 8 and media_ref[4:8] == b"ftyp":
+            return media_ref, "video/mp4", "video"
+        return media_ref, "application/octet-stream", "video"
+
+    cleaned = str(media_ref or "").strip()
+    if not cleaned:
+        raise ValueError("Media source cannot be empty.")
+
+    # 1. Base64 data URI
+    if cleaned.startswith("data:") and ";base64," in cleaned:
+        header, raw_b64 = cleaned.split(",", 1)
+        mime_type = "application/octet-stream"
+        m = re.search(r"data:([^;]+);base64", header)
+        if m:
+            mime_type = m.group(1).strip()
+        raw_b64 = re.sub(r"\s+", "", raw_b64)
+        padding = len(raw_b64) % 4
+        if padding:
+            raw_b64 += "=" * (4 - padding)
+        b = base64.b64decode(raw_b64)
+        kind = "video" if mime_type.startswith("video/") else "image"
+        return b, mime_type, kind
+
+    # 2. Local media file paths
+    candidate_filename = None
+    if "/media/" in cleaned:
+        candidate_filename = cleaned.split("/media/")[-1].split("?")[0].strip()
+    elif not cleaned.startswith("http://") and not cleaned.startswith("https://") and not cleaned.startswith("/") and "." in cleaned:
+        candidate_filename = cleaned.split("?")[0].strip()
+
+    search_dirs = [
+        Path("/app/apps/api/media"),
+        Path("apps/api/media"),
+        Path(__file__).resolve().parents[2] / "media",
+    ]
+
+    target_path: Optional[Path] = None
+    if candidate_filename:
+        for sdir in search_dirs:
+            p = (sdir / candidate_filename).resolve()
+            if p.is_file():
+                target_path = p
+                break
+
+    if not target_path:
+        p = Path(cleaned)
+        if p.is_file():
+            target_path = p
+
+    if target_path:
+        b = target_path.read_bytes()
+        ext = target_path.suffix.lstrip(".").lower()
+        if ext in {"mp4", "mov", "m4v", "webm", "avi", "mkv"}:
+            mime = "video/quicktime" if ext == "mov" else f"video/{ext}"
+            return b, mime, "video"
+        sniffed = sniff_image_subtype(b)
+        return b, f"image/{sniffed or ext or 'png'}", "image"
+
+    # 3. HTTP / HTTPS URL
+    if cleaned.startswith("http://") or cleaned.startswith("https://"):
+        if "/media/" in cleaned:
+            fname = cleaned.split("/media/")[-1].split("?")[0].strip()
+            for sdir in search_dirs:
+                p = (sdir / fname).resolve()
+                if p.is_file():
+                    b = p.read_bytes()
+                    ext = p.suffix.lstrip(".").lower()
+                    if ext in {"mp4", "mov", "m4v", "webm", "avi", "mkv"}:
+                        return b, f"video/{ext}", "video"
+                    sniffed = sniff_image_subtype(b)
+                    return b, f"image/{sniffed or 'png'}", "image"
+
+        lower_url = cleaned.lower()
+        is_video_ext = any(lower_url.endswith(f".{e}") or f".{e}?" in lower_url for e in ["mp4", "mov", "m4v", "webm"])
+        resp = requests.get(cleaned, timeout=timeout_seconds, stream=True)
+        resp.raise_for_status()
+        b = resp.content
+        ctype = resp.headers.get("content-type", "").split(";")[0].strip().lower()
+        if is_video_ext or ctype.startswith("video/"):
+            return b, ctype or "video/mp4", "video"
+        sniffed = sniff_image_subtype(b)
+        return b, f"image/{sniffed or 'png'}", "image"
+
+    raise ValueError(f"Could not load media bytes from source: '{cleaned[:100]}'")
+
 

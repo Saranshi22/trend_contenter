@@ -363,16 +363,27 @@ export interface EmailTemplateConfig {
 }
 
 export interface PublishFacebookRequest {
-  image_url: string;
-  text: string;
+  image_url?: string;
+  video_url?: string;
+  media_url?: string;
+  media_type?: 'IMAGE' | 'VIDEO';
+  target_format?: 'POST' | 'REEL';
+  title?: string;
+  text?: string;
   hashtags?: string[];
   page_id?: string;
   access_token?: string;
+  scheduled_at?: string;
 }
 
 export interface PublishInstagramRequest {
-  image_url: string;
-  text: string;
+  image_url?: string;
+  video_url?: string;
+  media_url?: string;
+  media_type?: 'IMAGE' | 'VIDEO';
+  target_format?: 'POST' | 'REEL' | 'STORY';
+  share_to_feed?: boolean;
+  text?: string;
   hashtags?: string[];
   instagram_user_id?: string;
   access_token?: string;

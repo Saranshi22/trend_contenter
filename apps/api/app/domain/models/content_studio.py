@@ -112,12 +112,15 @@ class GenerateVideoRequest(BaseModel):
     aspect_ratio: str = Field("16:9", description="Aspect ratio: 16:9, 9:16, 1:1")
     duration_seconds: int = Field(6, ge=4, le=8, description="Duration in seconds (4, 6, or 8)")
     fps: int = Field(24, description="Frame rate: 24 or 30")
-    person_generation: Optional[str] = Field(None, description="allow_adult, dont_allow, allow_all")
-    negative_prompt: Optional[str] = Field(None, description="Elements to avoid in video")
+    resolution: Optional[str] = Field("720p", description="Resolution: 720p or 1080p")
+    person_generation: Optional[str] = Field("allow_all", description="allow_adult, dont_allow, allow_all")
+    negative_prompt: Optional[str] = Field("No violence", description="Elements to avoid in video")
+    generate_audio: bool = Field(True, description="Generate audio for video")
     enhance_prompt: bool = Field(True, description="Automatically enhance video prompt")
-    model: Optional[str] = Field(None, description="Video model (default: gemini-omni-1.1-flash or veo-2.0-generate-001)")
+    model: Optional[str] = Field(None, description="Video model (default: veo-2.0-generate-001)")
     api_key: Optional[str] = Field(None, description="Optional Google GenAI API key override")
     base_url: Optional[str] = Field(None, description="Optional LLM gateway base URL override")
+    token: Optional[str] = Field(None, description="Optional LLM gateway token override")
 
 class GenerateVideoResponse(BaseModel):
     id: str
@@ -282,22 +285,49 @@ class GenerateExperimentsResponse(BaseModel):
 # ==========================================
 
 class PublishFacebookRequest(BaseModel):
-    image_url: str = Field(..., description="Public image URL or hosted asset URL to publish")
-    text: str = Field(..., min_length=1, description="Post caption/message")
+    media_url: Optional[str] = Field(None, description="Public image/video URL or hosted asset URL to publish")
+    image_url: Optional[str] = Field(None, description="Image URL (alias for media_url)")
+    video_url: Optional[str] = Field(None, description="Video URL (alias for media_url)")
+    target_format: Optional[str] = Field("POST", description="'POST' (Feed) or 'REEL' (Facebook Reels)")
+    media_type: Optional[str] = Field(None, description="'IMAGE' or 'VIDEO'. Auto-detected if omitted.")
+    title: Optional[str] = Field(None, description="Video post or Reel title")
+    text: Optional[str] = Field("", description="Post caption/message")
     hashtags: Optional[List[str]] = Field(default_factory=list)
     page_id: Optional[str] = None
     access_token: Optional[str] = None
+    scheduled_at: Optional[str] = Field(None, description="Optional ISO timestamp for scheduling feed video posts")
     gcs_bucket: Optional[str] = None
     gcloud_service_key: Optional[str] = None
 
+    def model_post_init(self, __context: Any) -> None:
+        if not self.media_url:
+            self.media_url = self.video_url or self.image_url or ""
+        if not self.image_url and self.media_url:
+            self.image_url = self.media_url
+        if not self.video_url and self.media_url and ("video" in str(self.media_type or "").lower() or str(self.target_format).upper() == "REEL"):
+            self.video_url = self.media_url
+
 class PublishInstagramRequest(BaseModel):
-    image_url: str = Field(..., description="Public image URL to publish to Instagram feed")
-    text: str = Field(..., min_length=1, max_length=2200, description="Instagram caption")
+    media_url: Optional[str] = Field(None, description="Public URL or local media path to publish")
+    image_url: Optional[str] = Field(None, description="Public image URL or alias for media_url")
+    video_url: Optional[str] = Field(None, description="Public video URL or alias for media_url")
+    media_type: Optional[str] = Field(None, description="'IMAGE' or 'VIDEO'. Auto-detected if omitted.")
+    target_format: Optional[str] = Field("POST", description="'POST' (Feed), 'REEL' (Reels), or 'STORY' (Story)")
+    share_to_feed: bool = Field(True, description="When target_format is REEL, whether to also share to feed")
+    text: Optional[str] = Field("", max_length=2200, description="Instagram caption (for POST and REEL)")
     hashtags: Optional[List[str]] = Field(default_factory=list)
     instagram_user_id: Optional[str] = None
     access_token: Optional[str] = None
     gcs_bucket: Optional[str] = None
     gcloud_service_key: Optional[str] = None
+
+    def model_post_init(self, __context: Any) -> None:
+        if not self.media_url:
+            self.media_url = self.video_url or self.image_url or ""
+        if not self.image_url and self.media_url:
+            self.image_url = self.media_url
+        if not self.video_url and self.media_url and ("video" in str(self.media_type or "").lower() or str(self.target_format).upper() == "REEL"):
+            self.video_url = self.media_url
 
 class EmailTemplateConfig(BaseModel):
     theme: Optional[str] = Field("modern_blue", description="modern_blue, minimalist_dark, emerald_clean, sunset_amber")
