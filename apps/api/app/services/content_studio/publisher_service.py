@@ -14,15 +14,16 @@ from ...domain.models.content_studio import (
     PublishResult
 )
 
-# Resilient imports for publishers
 try:
     from ..publishers import facebook as fb_publisher
     from ..publishers import instagram as ig_publisher
     from ..publishers import email as email_publisher
+    from ..publishers.common import PublisherError
 except ImportError:
-      from apps.api.app.publishers import facebook as fb_publisher
-      from apps.api.app.publishers import instagram as ig_publisher
-      from apps.api.app.publishers import email as email_publisher
+    from apps.api.app.publishers import facebook as fb_publisher
+    from apps.api.app.publishers import instagram as ig_publisher
+    from apps.api.app.publishers import email as email_publisher
+    from apps.api.app.publishers.common import PublisherError
 
 logger = logging.getLogger(__name__)
 
@@ -301,6 +302,8 @@ class PublisherService:
                 message=f"Successfully published to {display_format}!",
                 details=res
             )
+        except (ValueError, PublisherError) as e:
+            raise ValueError(str(e)) from e
         except Exception as e:
             logger.exception(f"Facebook publish failed: {e}")
             raise RuntimeError(f"Facebook publishing failed: {e}") from e
@@ -349,6 +352,8 @@ class PublisherService:
                 message=f"Successfully published to {display_format}!",
                 details=res
             )
+        except (ValueError, PublisherError) as e:
+            raise ValueError(str(e)) from e
         except Exception as e:
             logger.exception(f"Instagram publish failed: {e}")
             raise RuntimeError(f"Instagram publishing failed: {e}") from e

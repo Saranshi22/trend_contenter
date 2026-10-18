@@ -36,8 +36,8 @@ steps:
       - 'managed'
       - '--allow-unauthenticated'
       - '--add-cloudsql-instances=$PROJECT_ID:$_REGION:trend-contenter-db'
-      - '--set-secrets=POSTGRES_URI=postgres-uri:latest,SERPAPI_API_KEY=serpapi-key:latest,OPENAI_API_KEY=openai-key:latest,GEMINI_API_KEY=gemini-key:latest,JWT_SECRET=jwt-secret:latest'
-      - '--set-env-vars=APP_ENV=production,TRENDS_PROVIDER=serpapi,LLM_PROVIDER=openai,TRENDS_GEO=IN,TREND_QUALIFICATION_THRESHOLD=0.70'
+      - '--set-secrets=POSTGRES_URI=postgres-uri:latest,SERPAPI_API_KEY=serpapi-key:latest,OPENAI_API_KEY=openai-key:latest,GEMINI_API_KEY=gemini-key:latest,JWT_SECRET=jwt-secret:latest,SOCIALCRAWL_API_KEY=socialcrawl-key:latest,YOUTUBE_API_KEY=youtube-key:latest'
+      - '--set-env-vars=APP_ENV=production,TRENDS_PROVIDER=serpapi,LLM_PROVIDER=openai,TRENDS_GEO=IN,TRENDS_HOURS=4,TRENDS_LANGUAGE=en,TRENDS_POLL_INTERVAL_MINUTES=60,TREND_QUALIFICATION_THRESHOLD=0.70,GCS_BUCKET=$_GCS_BUCKET,USE_LLM_GATEWAY_FOR_CONTENT_STUDIO=true,LLM_GATEWAY_BASE_URL=https://bodhi-llm-gateway.dev.psbodhi.live,GEMINI_TEXT_MODEL=gemini-3.8-flash,GEMINI_EMBEDDING_MODEL=gemini-embedding-001,GEMINI_IMAGE_MODEL=gemini-3.1-flash-image,GEMINI_IMAGE_EDIT_MODEL=gemini-3.1-flash-image,VEO_MODEL=veo-3.1-fast-generate-preview,OPENAI_TEXT_MODEL=gpt-4o-mini'
     id: 'deploy-api'
 
   # 4. Build Frontend Web Container
@@ -79,6 +79,7 @@ steps:
 substitutions:
   _REGION: 'us-central1'
   _TAG: 'latest'
+  _GCS_BUCKET: 'trend-contenter-media-project-887f831b-8f15-4ffd-a4d'
 
 options:
   logging: CLOUD_LOGGING_ONLY

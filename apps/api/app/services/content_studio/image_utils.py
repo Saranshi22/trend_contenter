@@ -2,13 +2,41 @@ import base64
 import io
 import uuid
 import re
+import logging
 from pathlib import Path
 from typing import Tuple, Optional
 from PIL import Image, ImageOps
 
 from ...config import settings
 
+logger = logging.getLogger(__name__)
+
 settings.CONTENT_STUDIO_MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+
+def sync_file_to_gcs(filename: str, file_bytes: bytes, mime_type: Optional[str] = None) -> Optional[str]:
+    """
+    If GCS is enabled (via GCS_BUCKET or GCP_STORAGE_BUCKET_NAME), syncs the file bytes to GCS.
+    Returns the GCS signed or public URL if available, or None if GCS is not enabled.
+    Never raises an uncaught exception; logs a warning and allows local serving to continue seamlessly.
+    """
+    try:
+        from ..storage import get_gcp_storage_adapter
+        adapter = get_gcp_storage_adapter(
+            bucket_name=settings.GCS_BUCKET or settings.GCP_STORAGE_BUCKET_NAME or None,
+            service_key=settings.GCLOUD_SERVICE_KEY or None,
+        )
+        if not adapter:
+            return None
+        storage_key = f"content_studio/{filename}"
+        adapter.upload_file_with_key_sync(storage_key, file_bytes, content_type=mime_type)
+        logger.info("Successfully synced asset to GCS: %s", storage_key)
+        try:
+            return adapter.get_file_url(storage_key, expiry_seconds=86400)
+        except Exception:
+            return None
+    except Exception as exc:
+        logger.warning("GCS asset sync skipped or failed for %s: %s", filename, exc)
+        return None
 
 def clean_base64_string(b64_str: str) -> Tuple[bytes, str]:
     """
@@ -61,7 +89,7 @@ def bytes_to_base64(image_bytes: bytes, mime_type: str = "image/png") -> str:
 
 def save_image_bytes(image_bytes: bytes, prefix: str = "gen", ext: str = "png") -> Tuple[str, str]:
     """
-    Saves image bytes to content storage directory.
+    Saves image bytes to content storage directory and syncs to GCS if configured.
     Returns: (image_id, file_url)
     """
     img_id = f"{prefix}_{uuid.uuid4().hex[:12]}"
@@ -69,16 +97,32 @@ def save_image_bytes(image_bytes: bytes, prefix: str = "gen", ext: str = "png") 
     filepath = settings.CONTENT_STUDIO_MEDIA_DIR / filename
     with open(filepath, "wb") as f:
         f.write(image_bytes)
+
+    # Sync to GCS if enabled
+    mime = "image/jpeg" if ext.lower() in ("jpg", "jpeg") else f"image/{ext.lower()}"
+    sync_file_to_gcs(filename, image_bytes, mime_type=mime)
+
     return img_id, f"/api/v1/content-studio/media/{filename}"
 
 def save_pil_image(image: Image.Image, prefix: str = "img", ext: str = "png") -> Tuple[str, str]:
-    """Saves a PIL Image to storage and returns (image_id, file_url)."""
+    """Saves a PIL Image to storage, syncs to GCS if configured, and returns (image_id, file_url)."""
     img_id = f"{prefix}_{uuid.uuid4().hex[:12]}"
     filename = f"{img_id}.{ext}"
     filepath = settings.CONTENT_STUDIO_MEDIA_DIR / filename
     if ext.lower() in ("jpg", "jpeg") and image.mode in ("RGBA", "P"):
         image = image.convert("RGB")
     image.save(filepath)
+
+    # Sync to GCS if enabled
+    try:
+        buffered = io.BytesIO()
+        fmt = "JPEG" if ext.lower() in ("jpg", "jpeg") else ext.upper()
+        image.save(buffered, format=fmt)
+        mime = "image/jpeg" if ext.lower() in ("jpg", "jpeg") else f"image/{ext.lower()}"
+        sync_file_to_gcs(filename, buffered.getvalue(), mime_type=mime)
+    except Exception as e:
+        logger.warning("Could not sync PIL image to GCS: %s", e)
+
     return img_id, f"/api/v1/content-studio/media/{filename}"
 
 def create_mask_image(width: int, height: int, mask_type: str = "center") -> Image.Image:

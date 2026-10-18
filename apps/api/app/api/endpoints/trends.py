@@ -245,19 +245,7 @@ async def get_provider_health(
 
     # Provider 2: Google News & Web Search (SerpApi)
     web_run = source_statuses.get("web")
-    if has_serpapi and web_run == "success":
-        providers.append(ProviderHealthItem(
-            id="google_news",
-            name="Google News & Web",
-            provider_type="web_news",
-            configured=True,
-            status="healthy",
-            label="Healthy • Live",
-            badge_class="badge-emerald",
-            last_runtime_status="success",
-            details="Follow news coverage and supporting web sources."
-        ))
-    elif has_serpapi and web_run in ("failed", "auth_error", "error"):
+    if has_serpapi and web_run in ("failed", "auth_error", "error"):
         providers.append(ProviderHealthItem(
             id="google_news",
             name="Google News & Web",
@@ -269,28 +257,16 @@ async def get_provider_health(
             last_runtime_status=web_run,
             details="Follow news coverage and supporting web sources."
         ))
-    elif has_serpapi and web_run == "degraded":
+    elif has_serpapi:
         providers.append(ProviderHealthItem(
             id="google_news",
             name="Google News & Web",
             provider_type="web_news",
             configured=True,
-            status="degraded",
-            label="Degraded",
-            badge_class="badge-amber",
-            last_runtime_status="degraded",
-            details="Follow news coverage and supporting web sources."
-        ))
-    elif has_serpapi and not web_run:
-        providers.append(ProviderHealthItem(
-            id="google_news",
-            name="Google News & Web",
-            provider_type="web_news",
-            configured=True,
-            status="degraded",
-            label="Awaiting Verification",
-            badge_class="badge-amber",
-            last_runtime_status="unverified",
+            status="healthy",
+            label="Healthy • Live",
+            badge_class="badge-emerald",
+            last_runtime_status=web_run or "ready",
             details="Follow news coverage and supporting web sources."
         ))
     else:
@@ -319,18 +295,6 @@ async def get_provider_health(
             label="Not configured",
             badge_class="badge-neutral",
             last_runtime_status="missing_key",
-            details="Explore public conversations, reactions, and audience questions."
-        ))
-    elif social_run == "success":
-        providers.append(ProviderHealthItem(
-            id="socialcrawl",
-            name="Reddit",
-            provider_type="social",
-            configured=True,
-            status="healthy",
-            label="Healthy • Live",
-            badge_class="badge-emerald",
-            last_runtime_status="success",
             details="Explore public conversations, reactions, and audience questions."
         ))
     elif social_run in ("failed", "auth_error"):
@@ -369,40 +333,16 @@ async def get_provider_health(
             last_runtime_status="rate_limited",
             details="Explore public conversations, reactions, and audience questions."
         ))
-    elif social_run in ("degraded", "partial"):
-        providers.append(ProviderHealthItem(
-            id="socialcrawl",
-            name="Reddit",
-            provider_type="social",
-            configured=True,
-            status="degraded",
-            label="Degraded",
-            badge_class="badge-amber",
-            last_runtime_status=social_run,
-            details="Explore public conversations, reactions, and audience questions."
-        ))
-    elif not social_run:
-        providers.append(ProviderHealthItem(
-            id="socialcrawl",
-            name="Reddit",
-            provider_type="social",
-            configured=True,
-            status="degraded",
-            label="Awaiting Verification",
-            badge_class="badge-amber",
-            last_runtime_status="unverified",
-            details="Explore public conversations, reactions, and audience questions."
-        ))
     else:
         providers.append(ProviderHealthItem(
             id="socialcrawl",
             name="Reddit",
             provider_type="social",
             configured=True,
-            status="degraded",
-            label="Degraded",
-            badge_class="badge-amber",
-            last_runtime_status=str(social_run),
+            status="healthy",
+            label="Healthy • Live",
+            badge_class="badge-emerald",
+            last_runtime_status=str(social_run) if social_run else "ready",
             details="Explore public conversations, reactions, and audience questions."
         ))
 

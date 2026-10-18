@@ -22,6 +22,7 @@ class GenerateImageRequest(BaseModel):
     model: Optional[str] = Field(None, description="Optional Gemini image model (e.g. gemini-3.1-pro-image)")
     api_key: Optional[str] = Field(None, description="Optional Google GenAI API key override")
     base_url: Optional[str] = Field(None, description="Optional LLM gateway base URL override")
+    reference_image_base64: Optional[str] = Field(None, description="Optional reference image base64 for style, composition, or subject guidance")
 
 class GenerateImageResponse(BaseModel):
     images: List[GeneratedImageItem]
@@ -219,6 +220,8 @@ class RecommendedImageItem(BaseModel):
     title: str
     snippet: str
     source_domain: str
+    source_url: Optional[str] = Field(None, description="Direct URL to original webpage / source")
+    is_watermarked: bool = Field(False, description="Whether candidate appears to be a watermarked stock asset")
     width: Optional[int] = None
     height: Optional[int] = None
     relevance_score: float = Field(..., description="Prompt alignment score 0.0 - 1.0")
@@ -234,6 +237,8 @@ class RecommendImagesResponse(BaseModel):
     total_candidates: int
     reranker_model: str
     recommendations: List[RecommendedImageItem]
+    search_provider: Optional[str] = None
+    search_provider_display: Optional[str] = None
 
 
 # ==========================================

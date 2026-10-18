@@ -272,19 +272,20 @@ async def test_generate_experiments_with_real_persisted_opportunity(monkeypatch)
     import os
     from dotenv import dotenv_values
     env_vals = dotenv_values(".env")
-    gateway_token = os.environ.get("LLM_GATEWAY_TOKEN") or env_vals.get("LLM_GATEWAY_TOKEN")
-    gateway_base = os.environ.get("LLM_GATEWAY_BASE_URL") or env_vals.get("LLM_GATEWAY_BASE_URL")
-    gemini_key = os.environ.get("GEMINI_API_KEY") or env_vals.get("GEMINI_API_KEY")
+    gateway_token = (os.environ.get("LLM_GATEWAY_TOKEN") or env_vals.get("LLM_GATEWAY_TOKEN") or "").strip()
+    gateway_base = (os.environ.get("LLM_GATEWAY_BASE_URL") or env_vals.get("LLM_GATEWAY_BASE_URL") or "").strip()
+    gemini_key = (os.environ.get("GEMINI_API_KEY") or env_vals.get("GEMINI_API_KEY") or "").strip()
 
-    if not (gateway_token or gemini_key):
+    if not ((gateway_token and gateway_base) or gemini_key):
         pytest.skip("No real Gemini or Gateway credentials in environment")
 
-    if gateway_token:
+    if gateway_token and gateway_base:
         monkeypatch.setattr(settings, "LLM_GATEWAY_TOKEN", gateway_token)
         monkeypatch.setenv("LLM_GATEWAY_TOKEN", gateway_token)
-    if gateway_base:
         monkeypatch.setattr(settings, "LLM_GATEWAY_BASE_URL", gateway_base)
         monkeypatch.setenv("LLM_GATEWAY_BASE_URL", gateway_base)
+        monkeypatch.setattr(settings, "USE_LLM_GATEWAY_FOR_CONTENT_STUDIO", True)
+        monkeypatch.setenv("USE_LLM_GATEWAY_FOR_CONTENT_STUDIO", "true")
     if gemini_key:
         monkeypatch.setattr(settings, "GEMINI_API_KEY", gemini_key)
         monkeypatch.setenv("GEMINI_API_KEY", gemini_key)
@@ -343,7 +344,24 @@ async def test_add_text_overlay(client):
 
 
 @pytest.mark.asyncio
-async def test_generate_video_demo_mode(client):
+async def test_generate_video_demo_mode(client, monkeypatch):
+    from apps.api.app.services.content_studio.veo_service import veo_service
+    from apps.api.app.domain.models.content_studio import GenerateVideoResponse
+    monkeypatch.setattr(
+        veo_service,
+        "generate_video",
+        lambda req: GenerateVideoResponse(
+            id="vid_test_123",
+            video_url="/api/v1/content-studio/media/vid_test_123.mp4",
+            video_uri="/api/v1/content-studio/media/vid_test_123.mp4",
+            prompt=req.prompt,
+            aspect_ratio=req.aspect_ratio,
+            duration_seconds=req.duration_seconds,
+            fps=req.fps,
+            model_used="veo-2.0-generate-001",
+            status="completed"
+        )
+    )
     async with client as c:
         res = await c.post(
             f"{BASE}/videos/generate",
@@ -736,6 +754,161 @@ async def test_campaign_draft_not_found(client):
     async with client as c:
         res = await c.get(f"{BASE}/drafts/camp_nonexistent_id_9999")
         assert res.status_code == 404
+
+
+def test_is_likely_watermarked():
+    from apps.api.app.services.content_studio.search_service import is_likely_watermarked
+
+    # Watermarked stock image
+    shutterstock_cand = {
+        "title": "Stock Photo with watermark Royalty Free",
+        "image_url": "https://image.shutterstock.com/z/stock-photo-12345.jpg",
+        "source_domain": "shutterstock.com",
+        "source_url": "https://shutterstock.com/image-photo/12345"
+    }
+    assert is_likely_watermarked(shutterstock_cand) is True
+
+    # Clean editorial image
+    clean_cand = {
+        "title": "Modern electric car showcase 2026",
+        "image_url": "https://images.unsplash.com/photo-ev-clean.jpg",
+        "source_domain": "unsplash.com",
+        "source_url": "https://unsplash.com/photos/ev-clean"
+    }
+    assert is_likely_watermarked(clean_cand) is False
+
+
+@pytest.mark.asyncio
+async def test_search_images_prioritizes_clean_and_preserves_source():
+    from apps.api.app.services.content_studio.search_service import search_service
+
+    async def mock_search(query, num_results=10, **kwargs):
+        return [
+            {
+                "title": "Watermarked Stock 1",
+                "image_url": "https://www.gettyimages.com/detail/photo/123.jpg",
+                "source_domain": "gettyimages.com",
+                "source_url": "https://www.gettyimages.com/detail/123",
+                "is_watermarked": True
+            },
+            {
+                "title": "Clean EV Innovation",
+                "image_url": "https://images.wikimedia.org/clean_ev.jpg",
+                "source_domain": "wikimedia.org",
+                "source_url": "https://en.wikipedia.org/wiki/Electric_car",
+                "is_watermarked": False
+            },
+            {
+                "title": "Clean Tech Design",
+                "image_url": "https://behance.net/clean_tech.png",
+                "source_domain": "behance.net",
+                "source_url": "https://behance.net/gallery/tech",
+                "is_watermarked": False
+            },
+        ]
+
+    original_serp = search_service.search_serpapi
+    search_service.search_serpapi = mock_search
+
+    try:
+        candidates = await search_service.search_images(
+            "Electric vehicles", 
+            num_results=2, 
+            provider="serpapi", 
+            serpapi_key="mock_key"
+        )
+        assert len(candidates) == 2
+        # Both returned should be clean because clean_candidates >= 2
+        assert all(not c.get("is_watermarked") for c in candidates)
+        assert candidates[0]["source_url"] == "https://en.wikipedia.org/wiki/Electric_car"
+        assert candidates[1]["source_url"] == "https://behance.net/gallery/tech"
+    finally:
+        search_service.search_serpapi = original_serp
+
+
+def test_reranker_preserves_source_and_watermark_metadata():
+    from apps.api.app.services.content_studio.reranker_service import reranker_service
+
+    candidates = [
+        {
+            "id": "cand_1",
+            "title": "Clean Image",
+            "image_url": "https://example.com/clean.jpg",
+            "thumbnail_url": "https://example.com/clean_thumb.jpg",
+            "snippet": "Clean tech image",
+            "source_domain": "example.com",
+            "source_url": "https://example.com/clean_page",
+            "is_watermarked": False
+        },
+        {
+            "id": "cand_2",
+            "title": "Watermarked Shutterstock",
+            "image_url": "https://shutterstock.com/wm.jpg",
+            "thumbnail_url": "https://shutterstock.com/wm_thumb.jpg",
+            "snippet": "Stock photo royalty free",
+            "source_domain": "shutterstock.com",
+            "source_url": "https://shutterstock.com/photo/1",
+            "is_watermarked": True
+        },
+    ]
+
+    results = reranker_service._heuristic_fallback(
+        prompt="Clean visual",
+        candidates=candidates,
+        headline="Clean",
+        visual_direction="Innovation"
+    )
+    assert len(results) == 2
+    # First result should be the clean one due to watermark sorting penalty
+    assert results[0].is_watermarked is False
+    assert results[0].source_url == "https://example.com/clean_page"
+    assert results[1].is_watermarked is True
+    assert results[1].source_url == "https://shutterstock.com/photo/1"
+
+
+def test_save_image_syncs_to_gcs_when_configured(monkeypatch):
+    from unittest.mock import MagicMock
+    from apps.api.app.services.content_studio.image_utils import save_image_bytes
+
+    mock_adapter = MagicMock()
+    monkeypatch.setattr("apps.api.app.config.settings.GCS_BUCKET", "test-bucket")
+    monkeypatch.setattr(
+        "apps.api.app.services.storage.get_gcp_storage_adapter",
+        lambda *args, **kwargs: mock_adapter
+    )
+
+    test_bytes = b"fake-png-data"
+    img_id, file_url = save_image_bytes(test_bytes, prefix="test_gcs", ext="png")
+
+    assert img_id.startswith("test_gcs_")
+    assert file_url.startswith("/api/v1/content-studio/media/")
+    mock_adapter.upload_file_with_key_sync.assert_called_once()
+    called_key = mock_adapter.upload_file_with_key_sync.call_args[0][0]
+    called_bytes = mock_adapter.upload_file_with_key_sync.call_args[0][1]
+    assert called_key.startswith("content_studio/test_gcs_")
+    assert called_bytes == test_bytes
+
+
+@pytest.mark.asyncio
+async def test_get_media_downloads_from_gcs_if_missing_locally(client, monkeypatch):
+    from unittest.mock import MagicMock
+
+    mock_adapter = MagicMock()
+    mock_adapter.download_file_sync.return_value = b"downloaded-from-gcs"
+    monkeypatch.setattr("apps.api.app.config.settings.GCS_BUCKET", "test-bucket")
+    monkeypatch.setattr(
+        "apps.api.app.services.storage.get_gcp_storage_adapter",
+        lambda *args, **kwargs: mock_adapter
+    )
+
+    filename = f"remote_asset_{uuid.uuid4().hex[:8]}.png"
+    async with client as c:
+        res = await c.get(f"{BASE}/media/{filename}")
+        assert res.status_code == 200
+        assert res.content == b"downloaded-from-gcs"
+        mock_adapter.download_file_sync.assert_called_once_with(f"content_studio/{filename}")
+
+
 
 
 

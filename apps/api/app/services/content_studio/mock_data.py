@@ -97,19 +97,3 @@ def generate_demo_canvas(prompt: str, width: int = 1024, height: int = 1024, sty
     draw.text((40, height - 60), f"Mode: {style} • Aspect: {width}x{height}", fill=(180, 180, 180), font=font)
 
     return img
-
-SAMPLE_PREVIEW_VIDEOS = [
-    {
-        "title": "Cinematic Aerial Motion",
-        "url": "/api/v1/content-studio/media/sample_preview_1.mp4"
-    },
-    {
-        "title": "Dynamic Urban Scene",
-        "url": "/api/v1/content-studio/media/sample_preview_2.mp4"
-    }
-]
-
-def get_demo_video_url(prompt: str) -> str:
-    """Returns a high-quality sample video URL for demo mode fallback."""
-    idx = int(hashlib.md5(prompt.encode()).hexdigest(), 16) % len(SAMPLE_PREVIEW_VIDEOS)
-    return SAMPLE_PREVIEW_VIDEOS[idx]["url"]

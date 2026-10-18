@@ -7,16 +7,18 @@ class Settings(BaseSettings):
     GOOGLE_CLOUD_PROJECT: str = ""
     GOOGLE_CLOUD_LOCATION: str = ""
     
-    GEMINI_TEXT_MODEL: str = "gemini-1.5-pro"
-    GEMINI_EMBEDDING_MODEL: str = "text-embedding-004"
+    GEMINI_TEXT_MODEL: str = "gemini-3.8-flash"
+    GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
     OPENAI_TEXT_MODEL: str = "gpt-4o-mini"
 
     # Content Studio (image / video generation, editing, concepts)
-    GEMINI_IMAGE_MODEL: str = "gemini-3.1-pro-image"
-    GEMINI_IMAGE_EDIT_MODEL: str = "gemini-3.1-pro-image"
+    GEMINI_IMAGE_MODEL: str = "gemini-3.1-flash-image"
+    GEMINI_IMAGE_EDIT_MODEL: str = "gemini-3.1-flash-image"
     GEMINI_VIDEO_MODEL: str = "gemini-omni-1.1-flash"
-    VEO_MODEL: str = "veo-2.0-generate-001"
+    VEO_MODEL: str = "veo-3.1-fast-generate-preview"
     CONTENT_STUDIO_MEDIA_DIR: Path = Path(__file__).resolve().parent.parent / "media"
+
+    USE_LLM_GATEWAY_FOR_CONTENT_STUDIO: bool = True
     
     MONGODB_URI: str = "mongodb://localhost:27017"
     MONGODB_DB: str = "trend_contenter"
@@ -24,6 +26,8 @@ class Settings(BaseSettings):
     POSTGRES_URI: str = "postgresql+asyncpg://user:password@localhost:5432/trend_contenter"
     
     GCS_BUCKET: str = ""
+    GCP_STORAGE_BUCKET_NAME: str = ""
+    GCLOUD_SERVICE_KEY: str = ""
     PUBSUB_PROJECT: str = ""
     
     TRENDS_PROVIDER: str = "mock"
@@ -41,14 +45,10 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
     GEMINI_BASE_URL: str = ""
-    LLM_GATEWAY_URL: str = ""
     LLM_GATEWAY_BASE_URL: str = ""
     LLM_GATEWAY_TOKEN: str = ""
     ANTHROPIC_API_KEY: str = ""
 
-    def get_llm_gateway_url(self) -> str:
-        return (self.LLM_GATEWAY_URL or self.LLM_GATEWAY_BASE_URL or "").strip()
-    
     LLM_PROBE_MAX_QUERIES: int = 4
     LLM_REQUEST_TIMEOUT_SECONDS: int = 30
     LLM_MONITOR_PROVIDERS: str = "openai,gemini,litellm"

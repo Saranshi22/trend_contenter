@@ -1791,12 +1791,12 @@ button.select-trigger.select-glass-sm {
 }
 
 .cooking-banner {
-  background: linear-gradient(135deg, #F0F7FF 0%, #E6F4EA 50%, #FFF8E1 100%);
-  border: 1.5px solid #1A73E8;
+  background: #FFFFFF;
+  border: 1.5px solid #CBD5E1;
   border-radius: 12px;
-  padding: 20px 24px;
-  margin-bottom: 24px;
-  box-shadow: 0 4px 14px -2px rgba(26, 115, 232, 0.15);
+  padding: 18px 22px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   position: relative;
   overflow: hidden;
 }
@@ -1808,7 +1808,7 @@ button.select-trigger.select-glass-sm {
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, #1A73E8, #0F9D9A, #188038, #F9AB00);
+  background: linear-gradient(90deg, #1A73E8, #0F9D9A);
   background-size: 200% 100%;
   animation: shimmer 2s infinite linear;
 }

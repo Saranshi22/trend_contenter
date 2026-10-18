@@ -289,6 +289,8 @@ export interface RecommendedImageItem {
   title: string;
   snippet: string;
   source_domain: string;
+  source_url?: string | null;
+  is_watermarked?: boolean;
   width?: number | null;
   height?: number | null;
   relevance_score: number;
@@ -317,6 +319,8 @@ export interface RecommendImagesResponse {
   total_candidates: number;
   reranker_model: string;
   recommendations: RecommendedImageItem[];
+  search_provider?: string | null;
+  search_provider_display?: string | null;
 }
 
 export interface ContentExperimentVariant {
@@ -471,6 +475,10 @@ export interface CampaignDraft {
     title?: string;
     base64?: string;
     media_type?: 'image' | 'video';
+    is_retouched?: boolean;
+    retouch_prompt?: string;
+    original_url?: string;
+    original_base64?: string;
   } | null;
   curated_assets?: RecommendedImageItem[];
   selected_reference?: RecommendedImageItem | null;

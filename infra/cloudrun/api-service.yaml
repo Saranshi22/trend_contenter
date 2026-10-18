@@ -31,8 +31,32 @@ spec:
               value: "openai"
             - name: TRENDS_GEO
               value: "IN"
+            - name: TRENDS_HOURS
+              value: "4"
+            - name: TRENDS_LANGUAGE
+              value: "en"
+            - name: TRENDS_POLL_INTERVAL_MINUTES
+              value: "60"
             - name: TREND_QUALIFICATION_THRESHOLD
               value: "0.70"
+            - name: GCS_BUCKET
+              value: "trend-contenter-media-project-887f831b-8f15-4ffd-a4d"
+            - name: USE_LLM_GATEWAY_FOR_CONTENT_STUDIO
+              value: "true"
+            - name: LLM_GATEWAY_BASE_URL
+              value: "https://bodhi-llm-gateway.dev.psbodhi.live"
+            - name: GEMINI_TEXT_MODEL
+              value: "gemini-3.8-flash"
+            - name: GEMINI_EMBEDDING_MODEL
+              value: "gemini-embedding-001"
+            - name: GEMINI_IMAGE_MODEL
+              value: "gemini-3.1-flash-image"
+            - name: GEMINI_IMAGE_EDIT_MODEL
+              value: "gemini-3.1-flash-image"
+            - name: VEO_MODEL
+              value: "veo-3.1-fast-generate-preview"
+            - name: OPENAI_TEXT_MODEL
+              value: "gpt-4o-mini"
             - name: LLM_PROBE_MAX_QUERIES
               value: "4"
             - name: LLM_REQUEST_TIMEOUT_SECONDS
@@ -61,4 +85,14 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: jwt-secret
+                  key: latest
+            - name: SOCIALCRAWL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: socialcrawl-key
+                  key: latest
+            - name: YOUTUBE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: youtube-key
                   key: latest

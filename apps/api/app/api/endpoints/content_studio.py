@@ -102,10 +102,32 @@ async def get_media(filename: str):
     """
     Serves generated images/videos. Public by design so <img>/<video> tags can load them
     (filenames are random UUID-based identifiers).
+    If local file is missing on this instance (e.g. multi-instance or serverless container),
+    fetches and caches from GCS if configured.
     """
     media_dir = settings.CONTENT_STUDIO_MEDIA_DIR.resolve()
     path = (media_dir / filename).resolve()
-    if path.parent != media_dir or not path.is_file():
+    if path.parent != media_dir:
+        raise HTTPException(status_code=400, detail="Invalid media path")
+
+    if not path.is_file():
+        # Attempt fallback retrieval from GCS if configured
+        try:
+            from ...services.storage import get_gcp_storage_adapter
+            adapter = get_gcp_storage_adapter(
+                bucket_name=settings.GCS_BUCKET or settings.GCP_STORAGE_BUCKET_NAME or None,
+                service_key=settings.GCLOUD_SERVICE_KEY or None,
+            )
+            if adapter:
+                storage_key = f"content_studio/{filename}"
+                file_bytes = adapter.download_file_sync(storage_key)
+                with open(path, "wb") as f:
+                    f.write(file_bytes)
+                logger.info("Retrieved and cached media from GCS: %s", storage_key)
+        except Exception as e:
+            logger.debug("Media %s not found on GCS: %s", filename, e)
+
+    if not path.is_file():
         raise HTTPException(status_code=404, detail="Media not found")
     return FileResponse(path)
 
@@ -296,6 +318,8 @@ async def recommend_images(req: RecommendImagesRequest, current_user: User = Dep
             total_candidates=len(candidates),
             reranker_model=req.reranker_model or "gemini",
             recommendations=ranked_items[:req.num_results],
+            search_provider=getattr(search_service, "last_provider_used", None),
+            search_provider_display=getattr(search_service, "last_provider_display", None),
         )
     except Exception as e:
         raise _fail("/images/recommend", e)

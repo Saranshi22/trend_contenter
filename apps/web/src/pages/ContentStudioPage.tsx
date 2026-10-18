@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import type { 
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import type {
   Opportunity, 
   GeneratedImageItem, 
   GenerateImageResponse,
@@ -36,7 +37,9 @@ import {
   IconFileText,
   IconVideo,
   IconImage,
-  IconLightning
+  IconLightning,
+  IconDownload,
+  IconInfo
 } from '../components/Icons';
 
 interface ContentStudioPageProps {
@@ -67,11 +70,6 @@ const resolveImageSrc = (src?: string | null): string => {
   if (cleaned.startsWith('demo://')) {
     cleaned = cleaned.replace('demo://', '');
   }
-  // Redirect legacy external sample video URLs that fail with 403 Forbidden to the verified local media endpoint
-  if (cleaned.includes('commondatastorage.googleapis.com/gtv-videos-bucket/sample/')) {
-    const base = API_BASE.replace(/\/api\/v1\/?$/, '');
-    return `${base}/api/v1/content-studio/media/sample_preview_1.mp4`;
-  }
   if (cleaned.startsWith('/api/v1/')) {
     const base = API_BASE.replace(/\/api\/v1\/?$/, '');
     return `${base}${cleaned}`;
@@ -89,8 +87,10 @@ const resolvePublishImageUrl = (url?: string | null): string => {
 
 
 // ==============================================================
-// Live Cooking Progress Banner Component
+// Live Operation & Cooking Progress Component
 // ==============================================================
+export type OperationStatus = 'idle' | 'running' | 'finalizing' | 'completed' | 'failed';
+
 interface CookingBannerProps {
   title: string;
   stepMessage: string;
@@ -99,6 +99,10 @@ interface CookingBannerProps {
   stepsList: string[];
   progressPercent: number;
   accentColor?: string;
+  status: OperationStatus;
+  errorMessage?: string;
+  onDismiss?: () => void;
+  onRetry?: () => void;
 }
 
 const CookingBanner: React.FC<CookingBannerProps> = ({
@@ -107,48 +111,154 @@ const CookingBanner: React.FC<CookingBannerProps> = ({
   stepIndex,
   stepsList,
   progressPercent,
-  accentColor = '#1A73E8'
+  accentColor = '#1A73E8',
+  status,
+  errorMessage,
+  onDismiss,
+  onRetry
 }) => {
+  // 1. Collapsed Completion State: Clean, unobtrusive success banner with dismiss control
+  if (status === 'completed') {
+    return (
+      <div 
+        className="animate-fade-in" 
+        style={{
+          background: '#F0FDF4',
+          border: '1.5px solid #86EFAC',
+          borderRadius: '10px',
+          padding: '12px 18px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#DCFCE7', color: '#166534', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700, flexShrink: 0 }}>
+            ✓
+          </div>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#166534' }}>
+              {title} Completed
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#15803D' }}>
+              {stepMessage || 'Assets successfully synthesized, validated, and persisted.'}
+            </div>
+          </div>
+        </div>
+        {onDismiss && (
+          <button 
+            type="button" 
+            onClick={onDismiss}
+            style={{ background: 'none', border: 'none', color: '#15803D', cursor: 'pointer', fontSize: '16px', padding: '4px', lineHeight: 1 }}
+            title="Dismiss notification"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // 2. Failure State: Non-blocking error explanation with retry option
+  if (status === 'failed') {
+    return (
+      <div 
+        className="animate-fade-in" 
+        style={{
+          background: '#FEF2F2',
+          border: '1.5px solid #FCA5A5',
+          borderRadius: '10px',
+          padding: '14px 18px',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px'
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <IconAlertTriangle size={20} color="#DC2626" />
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#991B1B' }}>
+              {title} Failed
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#B91C1C' }}>
+              {errorMessage || stepMessage || 'An unexpected error occurred during synthesis.'}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          {onRetry && (
+            <button
+              type="button"
+              className="btn-primary"
+              style={{ padding: '6px 14px', fontSize: '0.78rem' }}
+              onClick={onRetry}
+            >
+              Retry
+            </button>
+          )}
+          {onDismiss && (
+            <button
+              type="button"
+              onClick={onDismiss}
+              style={{ background: 'none', border: 'none', color: '#991B1B', cursor: 'pointer', fontSize: '16px', padding: '4px' }}
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // 3. Active Running / Finalizing State
+  const isFinalizing = status === 'finalizing';
+  const effectiveProgress = isFinalizing ? 92 : Math.min(85, progressPercent);
+
   return (
-    <div className="cooking-banner animate-fade-in" style={{ borderColor: accentColor }}>
+    <div className="cooking-banner animate-fade-in" style={{ borderColor: isFinalizing ? '#0284C7' : accentColor }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span className="pulsing-cook-dot" style={{ background: accentColor }} />
-          <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)' }}>
+          <span className="pulsing-cook-dot" style={{ background: isFinalizing ? '#0284C7' : accentColor }} />
+          <h4 style={{ margin: 0, fontSize: '1.02rem', fontWeight: 700, color: 'var(--text-primary)' }}>
             {title}
           </h4>
-          <span className="badge badge-cyan" style={{ fontSize: '0.74rem' }}>
-            In Progress
+          <span className={`badge ${isFinalizing ? 'badge-blue' : 'badge-cyan'}`} style={{ fontSize: '0.72rem' }}>
+            {isFinalizing ? 'Finalizing' : 'In Progress'}
           </span>
         </div>
-        <div style={{ fontSize: '0.86rem', fontWeight: 700, color: accentColor }}>
-          {progressPercent}% Complete
+        <div style={{ fontSize: '0.86rem', fontWeight: 700, color: isFinalizing ? '#0284C7' : accentColor }}>
+          {effectiveProgress}%
         </div>
       </div>
 
       {/* Progress Track */}
-      <div style={{ width: '100%', height: '8px', background: '#E2E8F0', borderRadius: '4px', overflow: 'hidden', marginBottom: '14px' }}>
+      <div style={{ width: '100%', height: '6px', background: '#E2E8F0', borderRadius: '3px', overflow: 'hidden', marginBottom: '12px' }}>
         <div 
           style={{ 
             height: '100%', 
-            width: `${progressPercent}%`, 
-            background: `linear-gradient(90deg, ${accentColor}, #0F9D9A)`, 
-            borderRadius: '4px', 
+            width: `${effectiveProgress}%`, 
+            background: isFinalizing ? 'linear-gradient(90deg, #1A73E8, #0284C7)' : `linear-gradient(90deg, ${accentColor}, #0F9D9A)`, 
+            borderRadius: '3px', 
             transition: 'width 0.4s ease' 
           }} 
         />
       </div>
 
       {/* Active Step Message */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#FFFFFF', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-subtle)', marginBottom: '12px' }}>
-        <IconSparkles size={16} color={accentColor} />
-        <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#F8FAFC', padding: '8px 12px', borderRadius: '6px', border: '1px solid #E2E8F0', marginBottom: '10px' }}>
+        <IconSparkles size={15} color={isFinalizing ? '#0284C7' : accentColor} />
+        <span style={{ fontSize: '0.84rem', fontWeight: 600, color: 'var(--text-primary)' }}>
           {stepMessage}
         </span>
       </div>
 
-      {/* Real-time Checklist */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+      {/* Compact Checklist: Highlight ONLY the currently executing step */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
         {stepsList.map((step, idx) => {
           const isDone = idx < stepIndex;
           const isCurrent = idx === stepIndex;
@@ -156,17 +266,17 @@ const CookingBanner: React.FC<CookingBannerProps> = ({
             <div 
               key={idx} 
               style={{
-                fontSize: '0.74rem',
-                padding: '4px 8px',
+                fontSize: '0.72rem',
+                padding: '3px 8px',
                 borderRadius: '4px',
-                background: isDone ? '#E6F4EA' : isCurrent ? '#E8F0FE' : '#F1F5F9',
-                color: isDone ? '#137333' : isCurrent ? accentColor : '#64748B',
+                background: isDone ? '#F0FDF4' : isCurrent ? '#EFF6FF' : '#F8FAFC',
+                color: isDone ? '#15803D' : isCurrent ? '#1D4ED8' : '#94A3B8',
                 fontWeight: isCurrent ? 700 : 500,
-                border: isCurrent ? `1px solid ${accentColor}` : '1px solid transparent',
+                border: isCurrent ? '1px solid #93C5FD' : isDone ? '1px solid #BBF7D0' : '1px solid #E2E8F0',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '4px',
-                transition: 'all 0.25s ease'
+                transition: 'all 0.2s ease'
               }}
             >
               <span>{isDone ? '✓' : isCurrent ? '●' : '○'}</span>
@@ -201,6 +311,14 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [savedDraftsList, setSavedDraftsList] = useState<CampaignDraftSummary[]>([]);
   const [showCampaignSwitcher, setShowCampaignSwitcher] = useState<boolean>(false);
+  const campaignTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const campaignMenuRef = useRef<HTMLDivElement | null>(null);
+  const [campaignDropdownPos, setCampaignDropdownPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    maxHeight: number;
+  }>({ top: 0, left: 0, width: 340, maxHeight: 320 });
 
   const isInitialDraftLoadedRef = useRef<boolean>(false);
   const isRestoringDraftRef = useRef<boolean>(false);
@@ -252,7 +370,30 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
   const [aspectRatio, setAspectRatio] = useState<string>('1:1');
   const [stylePreset, setStylePreset] = useState<string>('photorealistic');
   const [numImagesToGenerate, setNumImagesToGenerate] = useState<number>(4); // Default 4
-  const [heroAsset, setHeroAsset] = useState<{ url: string; base64?: string; title?: string; media_type?: 'image' | 'video' } | null>(null);
+  const [heroAsset, setHeroAsset] = useState<{
+    url: string;
+    base64?: string;
+    title?: string;
+    media_type?: 'image' | 'video';
+    duration_seconds?: number;
+    aspect_ratio?: string;
+    is_retouched?: boolean;
+    retouch_prompt?: string;
+    original_url?: string;
+    original_base64?: string;
+  } | null>(null);
+  const [heroAssetLoadFailed, setHeroAssetLoadFailed] = useState<boolean>(false);
+
+  // Studio Health & Generation Engine Configuration
+  const [studioHealth, setStudioHealth] = useState<{
+    has_gemini_key: boolean;
+    models?: {
+      text?: string;
+      image_generation?: string;
+      image_editing?: string;
+      video_generation?: string;
+    };
+  } | null>(null);
 
   // Google Veo Video Generation State
   const [isGeneratingVideo, setIsGeneratingVideo] = useState<boolean>(false);
@@ -269,6 +410,10 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
   const [searchQueryInput, setSearchQueryInput] = useState<string>('');
   const [selectedReferenceAsset, setSelectedReferenceAsset] = useState<RecommendedImageItem | null>(null);
   const [brokenImageIds, setBrokenImageIds] = useState<Record<string, boolean>>({});
+  const [curationError, setCurationError] = useState<string | null>(null);
+  const [curationProviderDisplay, setCurationProviderDisplay] = useState<string | null>(null);
+  const [curationLastQuery, setCurationLastQuery] = useState<string | null>(null);
+  const referenceFileInputRef = useRef<HTMLInputElement>(null);
 
   // Stage 3 Sub-Action: Natural Language Retouch / Edit
   const [isRetouchOpen, setIsRetouchOpen] = useState<boolean>(false);
@@ -328,6 +473,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
   // Dynamic "Things Cooking" Experience State
   const [cookingState, setCookingState] = useState<{
     isCooking: boolean;
+    status: OperationStatus;
     stageName: string;
     stepMessage: string;
     stepIndex: number;
@@ -335,15 +481,18 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
     stepsList: string[];
     progressPercent: number;
     accentColor: string;
+    errorMessage?: string;
   }>({
     isCooking: false,
+    status: 'idle',
     stageName: '',
     stepMessage: '',
     stepIndex: 0,
     totalSteps: 0,
     stepsList: [],
     progressPercent: 0,
-    accentColor: '#1A73E8'
+    accentColor: '#1A73E8',
+    errorMessage: undefined
   });
 
   const cookingIntervalRef = useRef<any>(null);
@@ -354,32 +503,35 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
     let currentStep = 0;
     setCookingState({
       isCooking: true,
+      status: 'running',
       stageName,
       stepMessage: stepsList[0] || 'Cooking campaign assets...',
       stepIndex: 0,
       totalSteps: stepsList.length,
       stepsList,
-      progressPercent: 12,
-      accentColor
+      progressPercent: 15,
+      accentColor,
+      errorMessage: undefined
     });
 
     cookingIntervalRef.current = setInterval(() => {
       currentStep++;
-      if (currentStep < stepsList.length) {
-        // Step progression evenly advances up through milestones
-        const pct = Math.round(15 + ((currentStep + 1) / stepsList.length) * 70);
-        setCookingState(prev => ({
-          ...prev,
-          stepIndex: currentStep,
-          stepMessage: stepsList[currentStep] || prev.stepMessage,
-          progressPercent: Math.min(85, pct)
-        }));
-      } else {
-        // Once all step milestones are shown, continue advancing 1% incrementally towards 96%
-        // while awaiting backend LLM completion, so it never freezes on a static number
+      if (currentStep < stepsList.length - 1) {
+        const pct = Math.round(20 + (currentStep / Math.max(1, stepsList.length - 1)) * 60);
         setCookingState(prev => {
-          if (!prev.isCooking) return prev;
-          const nextPct = prev.progressPercent < 96 ? prev.progressPercent + 1 : 96;
+          if (prev.status !== 'running') return prev;
+          return {
+            ...prev,
+            stepIndex: currentStep,
+            stepMessage: stepsList[currentStep] || prev.stepMessage,
+            progressPercent: Math.min(80, pct)
+          };
+        });
+      } else {
+        // While waiting for network response, progress slowly advances up to at most 85%
+        setCookingState(prev => {
+          if (prev.status !== 'running') return prev;
+          const nextPct = prev.progressPercent < 85 ? prev.progressPercent + 1 : 85;
           return {
             ...prev,
             progressPercent: nextPct
@@ -389,19 +541,56 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
     }, 1600);
   };
 
-  const stopCooking = (finalMsg?: string) => {
+  const setOperationFinalizing = (msg?: string) => {
     if (cookingIntervalRef.current) {
       clearInterval(cookingIntervalRef.current);
       cookingIntervalRef.current = null;
     }
     setCookingState(prev => ({
       ...prev,
-      progressPercent: 100,
-      stepMessage: finalMsg || 'Asset ready!'
+      status: 'finalizing',
+      stepIndex: Math.max(0, prev.stepsList.length - 1),
+      stepMessage: msg || prev.stepsList[prev.stepsList.length - 1] || 'Validating and saving assets...',
+      progressPercent: 92
     }));
-    setTimeout(() => {
-      setCookingState(prev => ({ ...prev, isCooking: false, progressPercent: 0 }));
-    }, 600);
+  };
+
+  const completeCooking = (finalMsg?: string) => {
+    if (cookingIntervalRef.current) {
+      clearInterval(cookingIntervalRef.current);
+      cookingIntervalRef.current = null;
+    }
+    setCookingState(prev => ({
+      ...prev,
+      isCooking: false,
+      status: 'completed',
+      progressPercent: 100,
+      stepIndex: prev.stepsList.length,
+      stepMessage: finalMsg || 'Operation completed successfully!'
+    }));
+  };
+
+  const failCooking = (errorMsg?: string) => {
+    if (cookingIntervalRef.current) {
+      clearInterval(cookingIntervalRef.current);
+      cookingIntervalRef.current = null;
+    }
+    setCookingState(prev => ({
+      ...prev,
+      isCooking: false,
+      status: 'failed',
+      errorMessage: errorMsg || 'Operation failed'
+    }));
+  };
+
+  const dismissCookingBanner = () => {
+    setCookingState(prev => ({
+      ...prev,
+      isCooking: false,
+      status: 'idle',
+      progressPercent: 0,
+      errorMessage: undefined
+    }));
   };
 
   useEffect(() => {
@@ -422,6 +611,86 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [inspectingConcept, conceptChangePending, showCampaignSwitcher]);
+
+  // Dynamic campaign selector dropdown positioning and outside-click handling
+  const updateCampaignDropdownPosition = useCallback(() => {
+    if (!campaignTriggerRef.current) return;
+    const rect = campaignTriggerRef.current.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    // Detect persistent sidebar right edge if mounted to avoid overlapping
+    const sidebarEl = document.querySelector('.app-sidebar');
+    const sidebarRight = sidebarEl ? sidebarEl.getBoundingClientRect().right : 0;
+    const minLeft = Math.max(16, sidebarRight + 12);
+
+    const desiredWidth = 340;
+    const availableWidth = Math.max(260, viewportWidth - minLeft - 16);
+    const width = Math.min(desiredWidth, availableWidth);
+
+    // Right-align menu to trigger button by default
+    let left = rect.right - width;
+
+    // Prevent extending underneath the sidebar or past left viewport margin
+    if (left < minLeft) {
+      left = minLeft;
+    }
+
+    // Prevent extending past right viewport margin
+    if (left + width > viewportWidth - 16) {
+      left = Math.max(minLeft, viewportWidth - 16 - width);
+    }
+
+    // Vertical positioning: default below trigger; flip above if space below is cramped
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    let top = rect.bottom + 6;
+    let maxHeight = 340;
+
+    if (spaceBelow < 220 && spaceAbove > spaceBelow) {
+      top = Math.max(16, rect.top - 6 - Math.min(340, spaceAbove - 24));
+      maxHeight = Math.min(340, spaceAbove - 32);
+    } else {
+      maxHeight = Math.min(340, spaceBelow - 24);
+    }
+
+    setCampaignDropdownPos({
+      top,
+      left,
+      width,
+      maxHeight: Math.max(180, maxHeight)
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!showCampaignSwitcher) return;
+    updateCampaignDropdownPosition();
+
+    const handleScrollOrResize = () => {
+      updateCampaignDropdownPosition();
+    };
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        campaignMenuRef.current &&
+        !campaignMenuRef.current.contains(e.target as Node) &&
+        campaignTriggerRef.current &&
+        !campaignTriggerRef.current.contains(e.target as Node)
+      ) {
+        setShowCampaignSwitcher(false);
+      }
+    };
+
+    window.addEventListener('resize', handleScrollOrResize);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      window.removeEventListener('resize', handleScrollOrResize);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showCampaignSwitcher, updateCampaignDropdownPosition]);
 
   // Helpers
   const notify = (text: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -447,9 +716,26 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
     }
   };
 
+  const fetchStudioHealth = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/content-studio/health`);
+      if (res.ok) {
+        const data = await res.json();
+        setStudioHealth(data);
+      }
+    } catch (err) {
+      console.warn('Could not fetch studio health:', err);
+    }
+  };
+
   useEffect(() => {
     fetchPublishingStatus();
+    fetchStudioHealth();
   }, []);
+
+  useEffect(() => {
+    setHeroAssetLoadFailed(false);
+  }, [heroAsset?.url]);
 
   // -------------------------------------------------------------
   // Safe Stage Resolution (Prerequisite Validation)
@@ -461,7 +747,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
     artwork: any
   ): JourneyStage => {
     if (desiredStage === 'publish') {
-      if (artwork && (artwork.url || artwork.base64)) return 'publish';
+      if (artwork && (artwork.url || artwork.base64) && !heroAssetLoadFailed) return 'publish';
       if (concept) return 'assets';
       if (concepts) return 'concepts';
       return 'brief';
@@ -996,18 +1282,33 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
       setEmailBody(prev => prev || activeConcept.email_body);
       setEmailPrimaryCtaText(prev => prev || activeConcept.email_cta_text || 'Explore Campaign');
       setEmailPrimaryCtaUrl(prev => prev || activeConcept.email_cta_url || 'https://trendcontenter.com/');
-      setSearchQueryInput(prev => prev || activeConcept.search_query);
+      setSearchQueryInput(prev => prev || activeConcept.search_query || activeConcept.title || activeOpportunity?.title || '');
       setImagePrompt(prev => prev || activeConcept.visual_direction || activeConcept.search_query);
       setSelectedReferenceAsset(null);
     }
   }, [activeConcept]);
 
-  // Debounced autosave effect for all meaningful campaign state changes
+  // When in Stage 3, ensure reference query is populated and auto-curate if zero references exist
   useEffect(() => {
-    if (!isInitialDraftLoadedRef.current || isRestoringDraftRef.current || !campaignId) return;
+    if (currentStage === 'assets' && activeConcept) {
+      const defaultQ = searchQueryInput || activeConcept.search_query || activeConcept.title || activeOpportunity?.title || '';
+      if (!searchQueryInput && defaultQ) {
+        setSearchQueryInput(defaultQ);
+      }
+      if (curatedAssets.length === 0 && !isCuratingAssets && defaultQ) {
+        triggerCurateAssets(defaultQ, numAssetsConfig, {
+          headline: activeConcept.title,
+          topic: activeOpportunity?.title,
+          visual_direction: activeConcept.visual_direction
+        });
+      }
+    }
+  }, [currentStage, activeConcept?.id]);
 
-    const draftSnapshot: CampaignDraft = {
-      campaign_id: campaignId,
+  // Helper to construct a canonical draft snapshot from current state and optional overrides
+  const buildCampaignDraftSnapshot = (overrides?: Partial<CampaignDraft>): CampaignDraft => {
+    return {
+      campaign_id: campaignId || `camp_${Date.now()}`,
       opportunity_id: activeOpportunity ? activeOpportunity.opportunity_id : null,
       title: campaignTitle || (activeOpportunity ? activeOpportunity.title : 'Untitled Campaign'),
       current_stage: currentStage,
@@ -1039,9 +1340,10 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
         videoPrompt,
         videoAspectRatio,
         videoDuration,
-        videoFps
+        videoFps,
+        ...(overrides?.artwork_data || {})
       },
-      active_artwork: heroAsset,
+      active_artwork: overrides?.active_artwork !== undefined ? overrides.active_artwork : heroAsset,
       curated_assets: curatedAssets,
       selected_reference: selectedReferenceAsset,
       copy_data: {
@@ -1071,9 +1373,16 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
         smtpHost,
         smtpPort,
         smtpUsername
-      }
+      },
+      ...overrides
     };
+  };
 
+  // Debounced autosave effect for all meaningful campaign state changes
+  useEffect(() => {
+    if (!isInitialDraftLoadedRef.current || isRestoringDraftRef.current || !campaignId) return;
+
+    const draftSnapshot = buildCampaignDraftSnapshot();
     campaignDraftStore.saveDraft(draftSnapshot, 1200);
   }, [
     campaignId,
@@ -1264,9 +1573,11 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
 
       if (res.ok) {
         const data: GenerateExperimentsResponse = await res.json();
+        setOperationFinalizing('Finalizing creative concepts & updating campaign state...');
         setConceptsData(data);
+        let firstVariant: ContentExperimentVariant | null = null;
         if (data.variants && data.variants.length > 0) {
-          const firstVariant = data.variants[0];
+          firstVariant = data.variants[0];
           setActiveConcept(firstVariant);
           updateConceptDownstreamFields(firstVariant);
           // Purge stale images, videos, and hero asset from any prior brief
@@ -1277,17 +1588,41 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
           artworkConceptIdRef.current = firstVariant.id;
           artworkConceptTitleRef.current = firstVariant.title;
         }
-        stopCooking('Creative Concepts ready!');
+
+        const snapshot = buildCampaignDraftSnapshot({
+          concepts_data: data,
+          active_concept: firstVariant,
+          active_artwork: null,
+          artwork_data: {
+            imagePrompt: firstVariant?.visual_direction || firstVariant?.search_query || '',
+            aspectRatio,
+            stylePreset,
+            numImagesToGenerate,
+            generatedImages: [],
+            concept_id: firstVariant?.id || null,
+            concept_title: firstVariant?.title || null,
+            mediaMode: 'image',
+            generatedVideos: [],
+            videoPrompt: firstVariant?.veo_motion_prompt || '',
+            videoAspectRatio,
+            videoDuration,
+            videoFps
+          }
+        });
+        campaignDraftStore.saveDraft(snapshot, 0);
+        await campaignDraftStore.flushSave();
+
+        completeCooking('Creative Concepts ready!');
         setCurrentStage('concepts');
         notify('Creative Concepts generated from your brief!', 'success');
       } else {
-        const err = await res.json();
-        stopCooking();
+        const err = await res.json().catch(() => ({ detail: 'Server error' }));
+        failCooking(err.detail || 'Concepts generation failed');
         notify(`Concepts generation failed: ${err.detail || 'Server error'}`, 'error');
       }
     } catch (err) {
       console.error(err);
-      stopCooking();
+      failCooking('Network error generating concepts.');
       notify('Network error generating concepts.', 'error');
     } finally {
       setIsGeneratingConcepts(false);
@@ -1425,43 +1760,77 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
     ], '#1A73E8');
 
     try {
+      const imagePayload: any = {
+        prompt: finalPrompt,
+        number_of_images: count,
+        aspect_ratio: aspectRatio,
+        style_preset: stylePreset,
+        enhance_prompt: true
+      };
+
+      if (selectedReferenceAsset?.image_url && selectedReferenceAsset.image_url.startsWith('data:')) {
+        imagePayload.reference_image_base64 = selectedReferenceAsset.image_url;
+      }
+
       const res = await fetch(`${API_BASE}/content-studio/images/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: finalPrompt,
-          number_of_images: count,
-          aspect_ratio: aspectRatio,
-          style_preset: stylePreset,
-          enhance_prompt: true
-        })
+        body: JSON.stringify(imagePayload)
       });
 
       if (res.ok) {
         const data: GenerateImageResponse = await res.json();
-        setGeneratedImages(data.images || []);
         if (data.images && data.images.length > 0) {
+          setOperationFinalizing('Validating visual assets and updating campaign state...');
+          
+          setGeneratedImages(data.images);
           artworkConceptIdRef.current = activeConcept?.id || null;
           artworkConceptTitleRef.current = activeConcept?.title || null;
-          setHeroAsset({
+          
+          const primaryAsset = {
             url: data.images[0].url,
             base64: data.images[0].image_base64,
             title: `Generated Campaign Image #1`
+          };
+          setHeroAsset(primaryAsset);
+          setHeroAssetLoadFailed(false);
+
+          // Authoritatively persist to database before marking operation as completed
+          const snapshot = buildCampaignDraftSnapshot({
+            active_artwork: primaryAsset,
+            artwork_data: {
+              imagePrompt: finalPrompt,
+              aspectRatio,
+              stylePreset,
+              numImagesToGenerate: count,
+              generatedImages: data.images,
+              concept_id: activeConcept?.id || null,
+              concept_title: activeConcept?.title || null,
+              mediaMode: 'image',
+              generatedVideos,
+              videoPrompt,
+              videoAspectRatio,
+              videoDuration,
+              videoFps
+            }
           });
-          stopCooking(`Generated ${data.images.length} campaign visuals!`);
+          campaignDraftStore.saveDraft(snapshot, 0);
+          await campaignDraftStore.flushSave();
+
+          completeCooking(`Generated ${data.images.length} campaign visuals!`);
           notify(`Generated ${data.images.length} new campaign images!`, 'success');
         } else {
-          stopCooking('No images generated.');
+          failCooking('No image candidates generated. Try adjusting prompt keywords.');
           notify('No image candidates generated. Try adjusting prompt keywords.', 'info');
         }
       } else {
-        const err = await res.json();
-        stopCooking();
+        const err = await res.json().catch(() => ({ detail: 'Server error' }));
+        failCooking(err.detail || 'Image generation failed');
         notify(`Image generation failed: ${err.detail || 'Server error'}`, 'error');
       }
     } catch (err) {
       console.error(err);
-      stopCooking();
+      failCooking('Network error generating images.');
       notify('Network error generating images.', 'error');
     } finally {
       setIsGeneratingImages(false);
@@ -1507,25 +1876,52 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
 
       if (res.ok) {
         const data: GenerateVideoResponse = await res.json();
+        setOperationFinalizing('Encoding cinematic stream and persisting campaign state...');
+        
         // The video generation should only return 1 video. Not more than that.
         setGeneratedVideos([data]);
         artworkConceptIdRef.current = activeConcept?.id || null;
         artworkConceptTitleRef.current = activeConcept?.title || null;
-        setHeroAsset({
+        
+        const videoAsset = {
           url: data.video_url,
           title: `Veo Video (${data.aspect_ratio}, ${data.duration_seconds}s, ${data.fps}fps)`,
-          media_type: 'video'
+          media_type: 'video' as const
+        };
+        setHeroAsset(videoAsset);
+        setHeroAssetLoadFailed(false);
+
+        const snapshot = buildCampaignDraftSnapshot({
+          active_artwork: videoAsset,
+          artwork_data: {
+            imagePrompt,
+            aspectRatio,
+            stylePreset,
+            numImagesToGenerate,
+            generatedImages,
+            concept_id: activeConcept?.id || null,
+            concept_title: activeConcept?.title || null,
+            mediaMode: 'video',
+            generatedVideos: [data],
+            videoPrompt: finalPrompt,
+            videoAspectRatio,
+            videoDuration,
+            videoFps
+          }
         });
-        stopCooking('Google Veo video synthesized successfully!');
+        campaignDraftStore.saveDraft(snapshot, 0);
+        await campaignDraftStore.flushSave();
+
+        completeCooking('Google Veo video synthesized successfully!');
         notify('Cinematic video generated successfully!', 'success');
       } else {
-        const err = await res.json();
-        stopCooking();
+        const err = await res.json().catch(() => ({ detail: 'Server error' }));
+        failCooking(err.detail || 'Video generation failed');
         notify(`Video generation failed: ${err.detail || 'Server error'}`, 'error');
       }
     } catch (err) {
       console.error(err);
-      stopCooking();
+      failCooking('Network error generating video.');
       notify('Network error generating video.', 'error');
     } finally {
       setIsGeneratingVideo(false);
@@ -1543,21 +1939,39 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
     notify('Image attached as starting frame for Veo video generation.', 'info');
   };
 
-  // Curate Recommended Assets from Google Search (OPTIONAL INSPIRATION AID)
+  // Curate Recommended Assets from Visual Search (OPTIONAL INSPIRATION AID)
   const triggerCurateAssets = async (
     query: string, 
     count: number = numAssetsConfig,
     context?: { headline?: string; topic?: string; visual_direction?: string }
   ) => {
-    if (!query.trim()) return;
+    const effectiveQuery = (
+      query || 
+      searchQueryInput || 
+      context?.headline || 
+      activeConcept?.search_query || 
+      activeConcept?.title || 
+      activeOpportunity?.title || 
+      ''
+    ).trim();
+
+    if (!effectiveQuery) {
+      setCurationError('Please provide a campaign topic or concept to search for reference imagery.');
+      return;
+    }
+
     setIsCuratingAssets(true);
+    setCurationError(null);
+    setCurationLastQuery(effectiveQuery);
+    setSearchQueryInput(effectiveQuery);
     setBrokenImageIds({});
+
     try {
       const res = await fetch(`${API_BASE}/content-studio/images/recommend`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: query,
+          prompt: effectiveQuery,
           num_results: count,
           reranker_model: 'gemini',
           headline: context?.headline || activeConcept?.title,
@@ -1568,10 +1982,19 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
 
       if (res.ok) {
         const data: RecommendImagesResponse = await res.json();
-        setCuratedAssets(data.recommendations || []);
+        const items = data.recommendations || [];
+        setCuratedAssets(items);
+        setCurationProviderDisplay(data.search_provider_display || (data.search_provider === 'serpapi' ? 'Google Images (via SerpApi)' : 'Visual Search Engine'));
+        if (items.length === 0) {
+          setCurationError(`No reference imagery returned for "${effectiveQuery}". You can refine your search query or generate images directly from your creative prompt below.`);
+        }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setCurationError(err.detail || 'Visual reference retrieval encountered a temporary issue. Creative generation below remains fully operational.');
       }
     } catch (err) {
       console.warn('Could not curate recommended reference imagery:', err);
+      setCurationError('Network connection issue retrieving reference imagery. You can retry or proceed directly to generation below.');
     } finally {
       setIsCuratingAssets(false);
     }
@@ -1586,9 +2009,74 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
     } else {
       setSelectedReferenceAsset(item);
       const base = activeConcept?.visual_direction || imagePrompt;
-      const enriched = `${base}. Style and aesthetic inspired by: ${item.title}`;
+      const label = item.source_domain === 'Local Upload' ? `uploaded reference: ${item.title}` : item.title;
+      const enriched = `${base}. Style and aesthetic inspired by ${label}`;
       setImagePrompt(enriched);
       notify(`Using "${item.title.slice(0, 32)}..." as visual inspiration aid!`, 'success');
+    }
+  };
+
+  // Upload custom reference image from local machine
+  const handleUploadReferenceImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      notify('Please select a valid image file (PNG, JPG, WebP, etc.).', 'error');
+      return;
+    }
+
+    if (file.size > 15 * 1024 * 1024) {
+      notify('Image file size exceeds 15MB. Please choose a smaller image.', 'error');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (uploadEvent) => {
+      const dataUrl = uploadEvent.target?.result as string;
+      if (!dataUrl) return;
+
+      const baseName = file.name.replace(/\.[^/.]+$/, "") || 'Uploaded Reference';
+      const uploadedItem: RecommendedImageItem = {
+        id: `user_ref_${Date.now()}`,
+        image_url: dataUrl,
+        thumbnail_url: dataUrl,
+        title: baseName,
+        snippet: `Custom reference uploaded by user: ${file.name} (${(file.size / 1024).toFixed(0)} KB)`,
+        source_domain: 'Local Upload',
+        source_url: null,
+        is_watermarked: false,
+        relevance_score: 1.0,
+        overall_score: 1.0,
+        tags: ['user_upload', 'custom_reference']
+      };
+
+      setCuratedAssets((prev) => [uploadedItem, ...prev.filter((x) => x.id !== uploadedItem.id)]);
+      setCurationError(null);
+      setSelectedReferenceAsset(uploadedItem);
+
+      const base = activeConcept?.visual_direction || imagePrompt;
+      const enriched = `${base}. Style and aesthetic inspired by uploaded reference: ${uploadedItem.title}`;
+      setImagePrompt(enriched);
+      notify(`Uploaded and attached reference image "${uploadedItem.title}"!`, 'success');
+    };
+    reader.onerror = () => {
+      notify('Failed to read image file. Please try again.', 'error');
+    };
+    reader.readAsDataURL(file);
+
+    // Reset input value so same file can be chosen again if desired
+    e.target.value = '';
+  };
+
+  // Remove uploaded reference from curated list
+  const handleRemoveUploadedReference = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    setCuratedAssets((prev) => prev.filter((item) => item.id !== id));
+    if (selectedReferenceAsset?.id === id) {
+      setSelectedReferenceAsset(null);
+      setImagePrompt(activeConcept?.visual_direction || activeConcept?.search_query || '');
+      notify('Removed reference inspiration aid.', 'info');
     }
   };
 
@@ -1602,6 +2090,12 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
       notify('Please enter a natural language editing instruction.', 'error');
       return;
     }
+
+    const originalAsset = {
+      url: heroAsset.original_url || heroAsset.url,
+      base64: heroAsset.original_base64 || heroAsset.base64,
+      title: heroAsset.title
+    };
 
     setIsEditingAsset(true);
     startCooking('Applying Natural Language Edit', [
@@ -1628,23 +2122,67 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
         const data = await res.json();
         if (data.images && data.images[0]) {
           const editedImg: GeneratedImageItem = data.images[0];
-          setHeroAsset({
+          setOperationFinalizing('Validating retouched artwork and updating campaign state...');
+          
+          // 1. Update heroAsset with retouch metadata & preserve original for comparison
+          const retouchedAsset = {
             url: editedImg.url,
             base64: editedImg.image_base64,
-            title: `Retouched: ${editorPrompt.slice(0, 30)}`
+            title: `Retouched: ${editorPrompt.slice(0, 30)}`,
+            media_type: 'image' as const,
+            is_retouched: true,
+            retouch_prompt: editorPrompt,
+            original_url: originalAsset.url,
+            original_base64: originalAsset.base64
+          };
+          setHeroAsset(retouchedAsset);
+          setHeroAssetLoadFailed(false);
+
+          // 2. Prepend retouched image to generatedImages so it appears in candidate gallery above
+          const retouchedGalleryItem: GeneratedImageItem = {
+            id: editedImg.id || `retouch_${Date.now()}`,
+            url: editedImg.url,
+            image_base64: editedImg.image_base64,
+            enhanced_prompt: `[Retouched] ${editorPrompt}`,
+            mime_type: editedImg.mime_type || 'image/png'
+          };
+          const updatedImages = [retouchedGalleryItem, ...generatedImages.filter(x => x.url !== editedImg.url)];
+          setGeneratedImages(updatedImages);
+
+          // 3. Persist updated retouched asset immediately
+          const snapshot = buildCampaignDraftSnapshot({
+            active_artwork: retouchedAsset,
+            artwork_data: {
+              imagePrompt,
+              aspectRatio,
+              stylePreset,
+              numImagesToGenerate,
+              generatedImages: updatedImages,
+              concept_id: artworkConceptIdRef.current,
+              concept_title: artworkConceptTitleRef.current,
+              mediaMode: 'image',
+              generatedVideos,
+              videoPrompt,
+              videoAspectRatio,
+              videoDuration,
+              videoFps
+            }
           });
-          stopCooking('Retouch applied successfully!');
-          notify('Natural language edit applied successfully!', 'success');
+          campaignDraftStore.saveDraft(snapshot, 0);
+          await campaignDraftStore.flushSave();
+
+          completeCooking('Retouch applied successfully!');
+          notify('Natural language edit applied successfully! Updated asset is now active.', 'success');
           setIsRetouchOpen(false);
         }
       } else {
-        const err = await res.json();
-        stopCooking();
+        const err = await res.json().catch(() => ({ detail: 'Could not apply edit' }));
+        failCooking(err.detail || 'Could not apply edit');
         notify(`Retouch failed: ${err.detail || 'Could not apply edit'}`, 'error');
       }
     } catch (err) {
       console.error(err);
-      stopCooking();
+      failCooking('Network error executing retouch.');
       notify('Network error executing retouch.', 'error');
     } finally {
       setIsEditingAsset(false);
@@ -1709,7 +2247,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
 
       if (res.ok) {
         const data: PublishResult = await res.json();
-        stopCooking('Published to Facebook!');
+        completeCooking('Published to Facebook!');
         const formatLabel = fbTargetFormat === 'REEL' ? 'Facebook Reel' : (isVideo ? 'Facebook Video Post' : 'Facebook Page Post');
         notify(data.message || `Published to ${formatLabel}!`, 'success');
         setPublishHistory(prev => [
@@ -1718,13 +2256,13 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
         ]);
         fetchPublishingStatus();
       } else {
-        const err = await res.json();
-        stopCooking();
+        const err = await res.json().catch(() => ({ detail: 'Check credentials' }));
+        failCooking(err.detail || 'Check credentials');
         notify(`Facebook publish failed: ${err.detail || 'Check credentials'}`, 'error');
       }
     } catch (err) {
       console.error(err);
-      stopCooking();
+      failCooking('Network error publishing to Facebook.');
       notify('Network error publishing to Facebook.', 'error');
     } finally {
       setIsPublishing(false);
@@ -1780,7 +2318,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
 
       if (res.ok) {
         const data: PublishResult = await res.json();
-        stopCooking('Published to Instagram!');
+        completeCooking('Published to Instagram!');
         const formatLabel = igTargetFormat === 'REEL' ? 'Instagram Reel' : (igTargetFormat === 'STORY' ? 'Instagram Story' : 'Instagram Feed');
         notify(data.message || `Published to ${formatLabel}!`, 'success');
         setPublishHistory(prev => [
@@ -1789,13 +2327,13 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
         ]);
         fetchPublishingStatus();
       } else {
-        const err = await res.json();
-        stopCooking();
+        const err = await res.json().catch(() => ({ detail: 'Check credentials' }));
+        failCooking(err.detail || 'Check credentials');
         notify(`Instagram publish failed: ${err.detail || 'Check credentials'}`, 'error');
       }
     } catch (err) {
       console.error(err);
-      stopCooking();
+      failCooking('Network error publishing to Instagram.');
       notify('Network error publishing to Instagram.', 'error');
     } finally {
       setIsPublishing(false);
@@ -1861,7 +2399,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
 
       if (res.ok) {
         const data: PublishResult = await res.json();
-        stopCooking('Email broadcast dispatched!');
+        completeCooking('Email broadcast dispatched!');
         notify(data.message || 'Campaign Email successfully sent!', 'success');
         setPublishHistory(prev => [
           { platform: 'email', id: data.post_id || 'email_msg', timestamp: new Date().toLocaleTimeString(), title: emailSubject || 'Email Campaign' },
@@ -1869,13 +2407,13 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
         ]);
         fetchPublishingStatus();
       } else {
-        const err = await res.json();
-        stopCooking();
+        const err = await res.json().catch(() => ({ detail: 'Check credentials' }));
+        failCooking(err.detail || 'Check credentials');
         notify(`Email dispatch failed: ${err.detail || 'Check credentials'}`, 'error');
       }
     } catch (err) {
       console.error(err);
-      stopCooking();
+      failCooking('Network error dispatching email.');
       notify('Network error dispatching email.', 'error');
     } finally {
       setIsPublishing(false);
@@ -2030,15 +2568,18 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
               )}
             </div>
 
-            {/* Campaign Switcher Dropdown */}
+            {/* Campaign Switcher Trigger & Portal Dropdown */}
             <div style={{ position: 'relative' }}>
               <button
+                ref={campaignTriggerRef}
                 className="btn-outline"
                 style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', fontSize: '0.84rem' }}
                 onClick={() => {
                   refreshDraftsList();
-                  setShowCampaignSwitcher(!showCampaignSwitcher);
+                  setShowCampaignSwitcher(prev => !prev);
                 }}
+                aria-haspopup="true"
+                aria-expanded={showCampaignSwitcher}
               >
                 <span style={{ fontWeight: 600, maxWidth: '170px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   📁 {campaignTitle || 'Campaign Draft'}
@@ -2046,22 +2587,26 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                 <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>▼</span>
               </button>
 
-              {showCampaignSwitcher && (
+              {showCampaignSwitcher && createPortal(
                 <div 
+                  ref={campaignMenuRef}
                   style={{
-                    position: 'absolute',
-                    right: 0,
-                    top: '110%',
-                    width: '320px',
+                    position: 'fixed',
+                    top: `${campaignDropdownPos.top}px`,
+                    left: `${campaignDropdownPos.left}px`,
+                    width: `${campaignDropdownPos.width}px`,
+                    maxHeight: `${campaignDropdownPos.maxHeight}px`,
                     background: '#FFFFFF',
                     borderRadius: '8px',
                     border: '1px solid var(--border-subtle)',
                     boxShadow: 'var(--shadow-modal)',
-                    zIndex: 1000,
-                    padding: '8px'
+                    zIndex: 99999,
+                    padding: '8px',
+                    display: 'flex',
+                    flexDirection: 'column'
                   }}
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', flexShrink: 0 }}>
                     <span style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-primary)' }}>Saved Campaigns</span>
                     <button
                       className="btn-primary"
@@ -2075,7 +2620,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                     </button>
                   </div>
                   
-                  <div style={{ maxHeight: '240px', overflowY: 'auto', marginTop: '6px' }}>
+                  <div style={{ flex: 1, overflowY: 'auto', marginTop: '6px', minHeight: 0 }}>
                     {savedDraftsList.length === 0 ? (
                       <div style={{ padding: '12px', textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                         No other saved campaigns
@@ -2084,9 +2629,12 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                       savedDraftsList.map(draft => (
                         <div
                           key={draft.campaign_id}
-                          onClick={() => handleSelectCampaign(draft.campaign_id)}
+                          onClick={() => {
+                            handleSelectCampaign(draft.campaign_id);
+                            setShowCampaignSwitcher(false);
+                          }}
                           style={{
-                            padding: '8px',
+                            padding: '8px 10px',
                             borderRadius: '6px',
                             background: draft.campaign_id === campaignId ? '#F0F9FF' : 'transparent',
                             border: draft.campaign_id === campaignId ? '1px solid #BAE6FD' : '1px solid transparent',
@@ -2097,11 +2645,21 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                             marginBottom: '4px'
                           }}
                         >
-                          <div style={{ overflow: 'hidden', marginRight: '8px' }}>
-                            <div style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--text-primary)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                          <div style={{ overflow: 'hidden', marginRight: '8px', flex: 1 }}>
+                            <div 
+                              style={{ 
+                                fontWeight: 600, 
+                                fontSize: '0.82rem', 
+                                color: 'var(--text-primary)', 
+                                whiteSpace: 'nowrap', 
+                                textOverflow: 'ellipsis', 
+                                overflow: 'hidden' 
+                              }}
+                              title={draft.title || draft.campaign_id}
+                            >
                               {draft.title || draft.campaign_id}
                             </div>
-                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'flex', gap: '6px', marginTop: '2px' }}>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'flex', gap: '6px', marginTop: '2px', alignItems: 'center' }}>
                               <span className="badge badge-cyan" style={{ fontSize: '0.68rem', padding: '1px 4px' }}>Stage: {draft.current_stage}</span>
                               <span>{draft.updated_at ? new Date(draft.updated_at).toLocaleDateString() : 'Draft'}</span>
                             </div>
@@ -2124,14 +2682,15 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                       ))
                     )}
                   </div>
-                </div>
+                </div>,
+                document.body
               )}
             </div>
 
-            {cookingState.isCooking ? (
+            {cookingState.isCooking && (cookingState.status === 'running' || cookingState.status === 'finalizing') ? (
               <span className="metric-pill metric-pill-cyan" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span className="pulsing-cook-dot" />
-                <span>Active Operation In Progress...</span>
+                <span>{cookingState.status === 'finalizing' ? 'Finalizing Campaign Operation...' : 'Active Operation In Progress...'}</span>
               </span>
             ) : (
               <span className="metric-pill metric-pill-green">
@@ -2156,16 +2715,54 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
           }}
         >
           {[
-            { id: 'brief', num: '1', title: 'Campaign Brief', desc: briefFileName ? `Uploaded: ${briefFileName.slice(0, 18)}...` : activeOpportunity ? 'Strategy Selected' : 'Upload Brief Document' },
-            { id: 'concepts', num: '2', title: 'Choose Concept', desc: activeConcept ? activeConcept.variant_label : 'Select Creative Angle' },
-            { id: 'assets', num: '3', title: 'Generate & Retouch Artwork', desc: heroAsset ? 'Active Artwork Ready' : 'Generate 4 Campaign Visuals' },
-            { id: 'publish', num: '4', title: 'Publish & Channels', desc: 'Setup & Dispatch Live' }
+            { 
+              id: 'brief', 
+              num: '1', 
+              title: 'Campaign Brief', 
+              desc: briefFileName 
+                ? `Uploaded: ${briefFileName.slice(0, 18)}...` 
+                : activeOpportunity 
+                  ? 'Strategy Selected' 
+                  : (briefText ? 'Brief Provided' : 'Upload Brief Document') 
+            },
+            { 
+              id: 'concepts', 
+              num: '2', 
+              title: 'Choose Concept', 
+              desc: activeConcept 
+                ? activeConcept.variant_label 
+                : conceptsData 
+                  ? 'Select Concept' 
+                  : 'Generate Concepts' 
+            },
+            { 
+              id: 'assets', 
+              num: '3', 
+              title: 'Generate & Retouch Artwork', 
+              desc: !activeConcept 
+                ? 'Concept Required'
+                : heroAsset && !heroAssetLoadFailed
+                  ? (heroAsset.media_type === 'video' || heroAsset.url?.endsWith('.mp4') ? 'Active Video Selected' : 'Active Artwork Selected')
+                  : (generatedImages.length + generatedVideos.length > 0)
+                    ? `${generatedImages.length + generatedVideos.length} Candidate${generatedImages.length + generatedVideos.length === 1 ? '' : 's'} Generated`
+                    : 'Generate Campaign Visuals'
+            },
+            { 
+              id: 'publish', 
+              num: '4', 
+              title: 'Publish & Channels', 
+              desc: !heroAsset || heroAssetLoadFailed
+                ? 'Active Asset Required'
+                : publishingStatus?.[publishChannel]?.configured
+                  ? `${publishChannel === 'facebook' ? 'Facebook' : publishChannel === 'instagram' ? 'Instagram' : 'Email'} Ready`
+                  : 'Configure Channel & Copy'
+            }
           ].map((step) => {
             const isActive = currentStage === step.id;
             const isCompleted = (
               (step.id === 'brief' && (conceptsData !== null || briefFileBase64 !== null || activeOpportunity !== null)) ||
               (step.id === 'concepts' && activeConcept !== null) ||
-              (step.id === 'assets' && heroAsset !== null)
+              (step.id === 'assets' && heroAsset !== null && !heroAssetLoadFailed)
             );
             return (
               <button
@@ -2231,8 +2828,8 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
         </div>
       </div>
 
-      {/* Global Live Cooking Banner (Active when any process is cooking) */}
-      {cookingState.isCooking && (
+      {/* Global Live Cooking Banner (Active when process is running, finalizing, completed, or failed) */}
+      {cookingState.status !== 'idle' && (
         <CookingBanner 
           title={cookingState.stageName}
           stepMessage={cookingState.stepMessage}
@@ -2241,11 +2838,19 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
           stepsList={cookingState.stepsList}
           progressPercent={cookingState.progressPercent}
           accentColor={cookingState.accentColor}
+          status={cookingState.status}
+          errorMessage={cookingState.errorMessage}
+          onDismiss={dismissCookingBanner}
+          onRetry={
+            cookingState.stageName.includes('Image') ? () => triggerGenerateImages(imagePrompt, numImagesToGenerate) :
+            cookingState.stageName.includes('Video') ? () => triggerGenerateVideo() :
+            undefined
+          }
         />
       )}
 
-      {/* Persistent Campaign Summary Bar */}
-      {(activeOpportunity || activeConcept || heroAsset) && (
+      {/* Consolidated Campaign Context & Primary Action Bar */}
+      {(activeOpportunity || activeConcept || heroAsset || campaignTitle) && (
         <div 
           className="glass-card" 
           style={{ 
@@ -2257,75 +2862,174 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
             justifyContent: 'space-between',
             alignItems: 'center',
             flexWrap: 'wrap',
-            gap: '12px'
+            gap: '14px'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          {/* Left: Campaign Title & Selected Concept Variant / Hook */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span className="badge badge-cyan" style={{ fontSize: '0.75rem' }}>Campaign</span>
-              <span style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
-                {activeOpportunity?.title || conceptsData?.campaign_title || briefFileName || 'Custom Campaign'}
+              <span 
+                style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-primary)', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                title={activeOpportunity?.title || conceptsData?.campaign_title || briefFileName || campaignTitle || 'Custom Campaign'}
+              >
+                {activeOpportunity?.title || conceptsData?.campaign_title || briefFileName || campaignTitle || 'Custom Campaign'}
               </span>
             </div>
 
             {activeConcept && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span className="badge badge-amber" style={{ fontSize: '0.72rem' }}>
                   {activeConcept.variant_label}
                 </span>
-                <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                  "{activeConcept.hook.slice(0, 45)}..."
+                <span 
+                  style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  title={activeConcept.hook}
+                >
+                  "{activeConcept.hook}"
                 </span>
-              </div>
-            )}
-
-            {heroAsset && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span className="badge badge-emerald" style={{ fontSize: '0.72rem' }}>
-                  {heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4') ? 'Active Video' : 'Active Artwork'}
-                </span>
-                {heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4') ? (
-                  <video src={resolveImageSrc(heroAsset.url)} muted autoPlay loop playsInline style={{ width: '24px', height: '24px', borderRadius: '4px', objectFit: 'cover' }} />
-                ) : (
-                  <img src={resolveImageSrc(heroAsset.base64 || heroAsset.url)} alt="Artwork thumb" style={{ width: '24px', height: '24px', borderRadius: '4px', objectFit: 'cover' }} />
-                )}
               </div>
             )}
           </div>
 
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {currentStage !== 'publish' && (
-              <button 
-                className="btn-primary" 
-                style={{ padding: '6px 14px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}
-                onClick={() => {
-                  let targetStage: JourneyStage = 'brief';
-                  if (currentStage === 'brief') targetStage = 'concepts';
-                  else if (currentStage === 'concepts') targetStage = 'assets';
-                  else if (currentStage === 'assets') targetStage = 'publish';
-
-                  const safeStage = resolveSafeStage(
-                    targetStage,
-                    conceptsData,
-                    activeConcept,
-                    heroAsset
-                  );
-                  if (safeStage !== targetStage) {
-                    if (targetStage === 'publish') {
-                      notify('Please generate or select artwork before proceeding to publishing', 'error');
-                    } else if (targetStage === 'assets') {
-                      notify('Please generate and choose a concept before proceeding to artwork', 'error');
-                    } else if (targetStage === 'concepts') {
-                      notify('Please configure a brief before generating concepts', 'error');
-                    }
-                  } else {
-                    setCurrentStage(safeStage);
-                  }
+          {/* Right: Active Artwork Thumbnail/Status & Stage 3 Primary Action */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+            {heroAsset && (
+              <div 
+                style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '10px',
+                  background: '#FFFFFF',
+                  padding: '4px 10px 4px 6px',
+                  borderRadius: '8px',
+                  border: heroAssetLoadFailed ? '1px solid #FCD34D' : '1px solid #CBD5E1',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
                 }}
               >
-                <span>Continue Pipeline</span>
-                <IconArrowRight size={14} />
-              </button>
+                {heroAssetLoadFailed ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span className="badge badge-amber" style={{ fontSize: '0.72rem' }}>⚠️ Asset Unavailable</span>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      style={{ padding: '2px 8px', fontSize: '0.72rem', border: 'none', textDecoration: 'underline', color: '#1A73E8', background: 'transparent', cursor: 'pointer' }}
+                      onClick={() => setCurrentStage('assets')}
+                    >
+                      Choose Alternate
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ position: 'relative', width: '38px', height: '38px', borderRadius: '6px', overflow: 'hidden', background: '#0F172A', flexShrink: 0 }}>
+                      {heroAsset.media_type === 'video' || heroAsset.url?.endsWith('.mp4') ? (
+                        <>
+                          <video 
+                            src={resolveImageSrc(heroAsset.url)} 
+                            muted 
+                            autoPlay 
+                            loop 
+                            playsInline 
+                            onError={() => setHeroAssetLoadFailed(true)}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                          />
+                          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <span style={{ color: '#FFF', fontSize: '10px' }}>▶</span>
+                          </div>
+                        </>
+                      ) : (
+                        <img 
+                          src={resolveImageSrc(heroAsset.base64 || heroAsset.url)} 
+                          alt="Artwork thumb" 
+                          onError={() => setHeroAssetLoadFailed(true)}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                        />
+                      )}
+                    </div>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span 
+                          className={heroAsset.media_type === 'video' || heroAsset.url?.endsWith('.mp4') ? 'badge badge-cyan' : 'badge badge-emerald'} 
+                          style={{ fontSize: '0.70rem', padding: '1px 6px' }}
+                        >
+                          {heroAsset.media_type === 'video' || heroAsset.url?.endsWith('.mp4') ? 'Active Video' : 'Active Artwork'}
+                        </span>
+                        {heroAsset.is_retouched && (
+                          <span className="badge badge-emerald" style={{ fontSize: '0.66rem', padding: '1px 5px', background: '#DCFCE7', color: '#166534' }}>
+                            ✨ Retouched
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px', maxWidth: '160px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                        {heroAsset.title || 'Selected Candidate'}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Stage 3 Primary Progression Action */}
+            {currentStage === 'assets' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                {!activeConcept ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '0.74rem', color: '#DC2626', fontWeight: 600 }}>Concept Required</span>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      style={{ padding: '6px 12px', fontSize: '0.80rem' }}
+                      onClick={() => setCurrentStage('concepts')}
+                    >
+                      Choose Concept
+                    </button>
+                    <button 
+                      className="btn-primary" 
+                      style={{ padding: '8px 16px', fontSize: '0.84rem', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, opacity: 0.5, cursor: 'not-allowed' }}
+                      disabled
+                      title="Select a concept first to enable publishing"
+                    >
+                      <span>Continue to Publishing</span>
+                      <IconArrowRight size={14} />
+                    </button>
+                  </div>
+                ) : !heroAsset || (!heroAsset.url && !heroAsset.base64) ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>Active Artwork Required</span>
+                    <button 
+                      className="btn-primary" 
+                      style={{ padding: '8px 16px', fontSize: '0.84rem', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, opacity: 0.5, cursor: 'not-allowed' }}
+                      disabled
+                      title="Select an active artwork candidate below to proceed to publishing"
+                    >
+                      <span>Continue to Publishing</span>
+                      <IconArrowRight size={14} />
+                    </button>
+                  </div>
+                ) : heroAssetLoadFailed ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '0.74rem', color: '#D97706', fontWeight: 600 }}>Asset Unavailable</span>
+                    <button 
+                      className="btn-primary" 
+                      style={{ padding: '8px 16px', fontSize: '0.84rem', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, opacity: 0.5, cursor: 'not-allowed' }}
+                      disabled
+                      title="Please choose an accessible artwork candidate below"
+                    >
+                      <span>Continue to Publishing</span>
+                      <IconArrowRight size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <button 
+                    className="btn-primary" 
+                    style={{ padding: '8px 18px', fontSize: '0.84rem', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
+                    onClick={handleProceedToPublish}
+                  >
+                    <span>Continue to Publishing</span>
+                    <IconArrowRight size={14} />
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -3602,61 +4306,103 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
       {/* ============================================================== */}
       {currentStage === 'assets' && (
         <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          {/* Active Concept Header */}
-          <div className="glass-card" style={{ padding: '16px 20px', background: '#FAFCFF', border: '1px solid #D2E3FC' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span className="badge badge-amber">{activeConcept?.variant_label || 'Active Concept'}</span>
-                  <span style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>
-                    {activeConcept?.title || 'Campaign Concept'}
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                  "{activeConcept?.hook}" &bull; Visual generation tailored to audience resonance.
-                </div>
-              </div>
-
-              {heroAsset && (
-                <button 
-                  className="btn-emerald" 
-                  style={{ padding: '10px 22px', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}
-                  onClick={handleProceedToPublish}
-                >
-                  <IconSend size={16} />
-                  <span>Ready to Publish →</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* OPTIONAL AID: Recommended Visual References (from Google Search) */}
+          {/* OPTIONAL AID: Recommended Visual References */}
           <div className="glass-card" style={{ background: '#FFFFFF', border: '1px solid #E2E8F0', padding: '18px 20px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '12px' }}>
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span className="badge badge-cyan" style={{ fontSize: '0.72rem' }}>Optional Inspiration Aid</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '14px' }}>
+              <div style={{ maxWidth: '580px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span className="badge badge-cyan" style={{ fontSize: '0.72rem' }}>Inspiration Aid</span>
                   <h4 style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>
                     Recommended Visual References ({curatedAssets.length})
                   </h4>
+                  {curationProviderDisplay && (
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', background: '#F1F5F9', padding: '2px 8px', borderRadius: '4px' }}>
+                      Source: {curationProviderDisplay}
+                    </span>
+                  )}
                 </div>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
-                  Curated from Google search to ground creative visuals in verified trends. Click any reference below to use its style/aesthetic as inspiration for generating your images.
+                <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '4px 0 0 0', lineHeight: 1.4 }}>
+                  Explore visual references for your campaign's style, setting, and composition. Select any reference to ground your visual generation in verified trend context.
                 </p>
               </div>
 
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <input 
-                  type="text"
-                  className="input-glass"
-                  style={{ width: '220px', padding: '6px 10px', fontSize: '0.8rem' }}
-                  value={searchQueryInput}
-                  onChange={(e) => setSearchQueryInput(e.target.value)}
-                  placeholder="Reference search query..."
+              {/* Usable query field and clearly labelled Search References action */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', flex: '1 1 320px', justifyContent: 'flex-end' }}>
+                <div style={{ position: 'relative', flex: '1 1 220px', maxWidth: '420px', minWidth: '200px' }}>
+                  <IconSearch size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8', pointerEvents: 'none' }} />
+                  <input 
+                    type="text"
+                    className="input-glass"
+                    style={{ width: '100%', padding: '7px 28px 7px 30px', fontSize: '0.82rem', boxSizing: 'border-box' }}
+                    value={searchQueryInput}
+                    title={searchQueryInput ? `Current search query: "${searchQueryInput}"` : 'Enter keywords to find visual references'}
+                    onChange={(e) => setSearchQueryInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        triggerCurateAssets(searchQueryInput, numAssetsConfig, {
+                          headline: activeConcept?.title,
+                          topic: activeOpportunity?.title,
+                          visual_direction: activeConcept?.visual_direction
+                        });
+                      }
+                    }}
+                    placeholder="Search visual references..."
+                  />
+                  {searchQueryInput && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQueryInput('')}
+                      title="Clear search query"
+                      style={{
+                        position: 'absolute',
+                        right: '8px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'transparent',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        padding: '2px',
+                        fontSize: '14px',
+                        lineHeight: 1
+                      }}
+                    >
+                      &times;
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="file"
+                  ref={referenceFileInputRef}
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={handleUploadReferenceImage}
                 />
                 <button 
+                  type="button"
                   className="btn-outline" 
-                  style={{ padding: '6px 12px', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                  style={{
+                    padding: '7px 14px',
+                    fontSize: '0.80rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontWeight: 600,
+                    flexShrink: 0,
+                    background: '#FFFFFF',
+                    borderColor: '#CBD5E1',
+                    color: 'var(--text-primary)'
+                  }}
+                  onClick={() => referenceFileInputRef.current?.click()}
+                  title="Upload your own reference image (JPG, PNG, WebP)"
+                >
+                  <IconUpload size={13} color="var(--action-primary)" />
+                  <span>Upload Reference Image</span>
+                </button>
+                <button 
+                  type="button"
+                  className="btn-primary" 
+                  style={{ padding: '7px 14px', fontSize: '0.80rem', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, flexShrink: 0 }}
                   onClick={() => triggerCurateAssets(searchQueryInput, numAssetsConfig, {
                     headline: activeConcept?.title,
                     topic: activeOpportunity?.title,
@@ -3664,25 +4410,171 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                   })}
                   disabled={isCuratingAssets}
                 >
-                  <IconRefresh size={12} />
-                  <span>{isCuratingAssets ? 'Curating...' : 'Refresh'}</span>
+                  <IconSparkles size={13} className={isCuratingAssets ? 'spin' : ''} />
+                  <span>{isCuratingAssets ? 'Searching...' : 'Search References'}</span>
                 </button>
               </div>
             </div>
 
-            {/* Curated Reference Cards Carousel/Row */}
+            {/* Curated Reference Cards Adaptive Responsive Layout */}
             {isCuratingAssets ? (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                {Array.from({ length: numAssetsConfig }).map((_, idx) => (
-                  <div key={idx} className="skeleton-card skeleton-shimmer" style={{ height: '140px', borderRadius: '8px' }} />
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 
+                  (numAssetsConfig || 2) <= 1 
+                    ? 'minmax(280px, 580px)' 
+                    : (numAssetsConfig || 2) === 2 
+                      ? 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))' 
+                      : 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))',
+                gap: '16px'
+              }}>
+                {Array.from({ length: numAssetsConfig || 2 }).map((_, idx) => (
+                  <div key={idx} className="skeleton-card skeleton-shimmer" style={{ height: '240px', borderRadius: '10px' }} />
                 ))}
               </div>
+            ) : curationError ? (
+              <div style={{ padding: '16px 20px', background: '#FEF2F2', borderRadius: '8px', border: '1px solid #FECACA', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.88rem', color: '#991B1B' }}>
+                      Unable to retrieve visual references
+                    </div>
+                    <div style={{ fontSize: '0.80rem', color: '#7F1D1D', marginTop: '4px' }}>
+                      {curationError}
+                    </div>
+                    {searchQueryInput && (
+                      <div style={{ fontSize: '0.74rem', color: '#991B1B', marginTop: '4px' }}>
+                        Retained query: <span style={{ fontWeight: 600 }}>"{searchQueryInput}"</span>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      style={{ padding: '6px 14px', fontSize: '0.78rem', background: '#FFFFFF', color: '#1E293B', borderColor: '#CBD5E1', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      onClick={() => referenceFileInputRef.current?.click()}
+                    >
+                      <IconUpload size={13} color="var(--action-primary)" />
+                      <span>Upload Reference Image</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      style={{ padding: '6px 14px', fontSize: '0.78rem', background: '#FFFFFF', color: '#991B1B', borderColor: '#FECACA' }}
+                      onClick={() => {
+                        triggerCurateAssets(searchQueryInput, numAssetsConfig, {
+                          headline: activeConcept?.title,
+                          topic: activeOpportunity?.title,
+                          visual_direction: activeConcept?.visual_direction
+                        });
+                      }}
+                    >
+                      Retry Search
+                    </button>
+                  </div>
+                </div>
+                <div style={{ fontSize: '0.74rem', color: '#B91C1C', fontStyle: 'italic' }}>
+                  Note: Visual reference retrieval is an optional inspiration aid; campaign image generation below remains fully operational.
+                </div>
+              </div>
             ) : curatedAssets.length === 0 ? (
-              <div style={{ padding: '16px', background: '#F8FAFC', borderRadius: '8px', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-                No reference images found for this query. You can generate images directly using the studio prompt below.
+              <div style={{ padding: '18px 20px', background: '#F8FAFC', borderRadius: '8px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-primary)' }}>
+                      No visual references found for "{searchQueryInput || curationLastQuery || activeConcept?.title || 'this campaign'}"
+                    </div>
+                    <div style={{ fontSize: '0.80rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                      Try searching with broader concept keywords, or upload your own reference image below.
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      style={{ padding: '6px 14px', fontSize: '0.78rem', background: '#FFFFFF', color: '#1E293B', borderColor: '#CBD5E1', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      onClick={() => referenceFileInputRef.current?.click()}
+                    >
+                      <IconUpload size={13} color="var(--action-primary)" />
+                      <span>Upload Reference Image</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      style={{ padding: '6px 14px', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      onClick={() => {
+                        const query = activeOpportunity?.title || activeConcept?.title || searchQueryInput || 'campaign visual';
+                        triggerCurateAssets(query, numAssetsConfig, {
+                          headline: activeConcept?.title,
+                          topic: activeOpportunity?.title,
+                          visual_direction: activeConcept?.visual_direction
+                        });
+                      }}
+                    >
+                      <IconRefresh size={12} />
+                      <span>Search Suggested</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Helpful Query Suggestion Pills */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '4px' }}>
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontWeight: 600 }}>Suggested Queries:</span>
+                  {activeOpportunity?.title && (
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      style={{ padding: '3px 8px', fontSize: '0.74rem', background: '#FFF' }}
+                      onClick={() => {
+                        setSearchQueryInput(activeOpportunity.title);
+                        triggerCurateAssets(activeOpportunity.title, numAssetsConfig, {
+                          headline: activeConcept?.title,
+                          topic: activeOpportunity.title,
+                          visual_direction: activeConcept?.visual_direction
+                        });
+                      }}
+                    >
+                      Topic: "{activeOpportunity.title}"
+                    </button>
+                  )}
+                  {activeConcept?.title && (
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      style={{ padding: '3px 8px', fontSize: '0.74rem', background: '#FFF' }}
+                      onClick={() => {
+                        setSearchQueryInput(activeConcept.title);
+                        triggerCurateAssets(activeConcept.title, numAssetsConfig, {
+                          headline: activeConcept.title,
+                          topic: activeOpportunity?.title,
+                          visual_direction: activeConcept.visual_direction
+                        });
+                      }}
+                    >
+                      Concept: "{activeConcept.title.slice(0, 32)}..."
+                    </button>
+                  )}
+                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)', fontStyle: 'italic', marginLeft: 'auto' }}>
+                    Note: References are an optional inspiration aid; image generation below is fully independent.
+                  </span>
+                </div>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+              <div 
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 
+                    curatedAssets.length <= 1 
+                      ? 'minmax(280px, 580px)' 
+                      : curatedAssets.length === 2 
+                        ? 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))' 
+                        : curatedAssets.length === 3 
+                          ? 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))' 
+                          : 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))',
+                  gap: '16px'
+                }}
+              >
                 {curatedAssets.map((item, idx) => {
                   const isReferenced = selectedReferenceAsset?.id === item.id;
                   const cardKey = item.id || `ref_${idx}_${item.image_url}`;
@@ -3693,18 +4585,20 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                       key={cardKey}
                       onClick={() => handleToggleReferenceAsset(item)}
                       style={{
-                        borderRadius: '8px',
+                        borderRadius: '10px',
                         overflow: 'hidden',
-                        background: isReferenced ? '#E8F0FE' : '#FFFFFF',
-                        border: isReferenced ? '2px solid #1A73E8' : '1px solid var(--border-subtle)',
-                        boxShadow: isReferenced ? 'var(--shadow-card-hover)' : 'var(--shadow-sm)',
+                        background: isReferenced ? '#F0F7FF' : '#FFFFFF',
+                        border: isReferenced ? '2px solid #1A73E8' : '1px solid #E2E8F0',
+                        boxShadow: isReferenced ? '0 2px 8px rgba(26,115,232,0.18)' : '0 1px 3px rgba(0,0,0,0.05)',
                         cursor: 'pointer',
                         transition: 'all 0.2s ease',
                         display: 'flex',
-                        flexDirection: 'column'
+                        flexDirection: 'column',
+                        height: '100%'
                       }}
                     >
-                      <div style={{ position: 'relative', height: '120px', background: '#0F172A' }}>
+                      {/* Visual Preview Container with consistent 16:10 aspect ratio */}
+                      <div style={{ position: 'relative', width: '100%', aspectRatio: '16 / 10', background: '#0F172A', overflow: 'hidden' }}>
                         {isBroken ? (
                           <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#F8FAFC', color: 'var(--text-muted)', gap: '6px' }}>
                             <IconSparkles size={16} color="#94A3B8" />
@@ -3719,26 +4613,143 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                             loading="lazy"
                           />
                         )}
-                        {isReferenced && (
-                          <div style={{ position: 'absolute', top: '6px', left: '6px' }}>
-                            <span className="badge badge-cyan" style={{ background: '#1A73E8', color: '#FFF', fontSize: '0.68rem' }}>
-                              ✓ Using as Inspiration
+
+                        {/* Top-Left Badges: Compact Selected indicator & Watermark warning */}
+                        <div style={{ position: 'absolute', top: '8px', left: '8px', display: 'flex', gap: '4px', flexWrap: 'wrap', maxWidth: '80%' }}>
+                          {isReferenced && (
+                            <span style={{ fontSize: '0.68rem', fontWeight: 600, background: '#1A73E8', color: '#FFF', padding: '2px 8px', borderRadius: '4px', boxShadow: '0 1px 3px rgba(0,0,0,0.3)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              ✓ Selected Reference
+                            </span>
+                          )}
+                          {item.is_watermarked && (
+                            <span 
+                              style={{ fontSize: '0.64rem', fontWeight: 600, padding: '2px 6px', background: 'rgba(254, 243, 199, 0.95)', color: '#92400E', border: '1px solid #FCD34D', borderRadius: '4px', backdropFilter: 'blur(2px)' }}
+                              title="This external reference contains a visible host watermark"
+                            >
+                              ⚠️ Watermarked Preview
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Top-Right Badge: Clear External Reference Tag or Your Upload */}
+                        <div style={{ position: 'absolute', top: '8px', right: '8px' }}>
+                          {item.source_domain === 'Local Upload' ? (
+                            <span style={{ fontSize: '0.62rem', fontWeight: 600, background: '#7C3AED', color: '#FFFFFF', padding: '2px 6px', borderRadius: '4px', backdropFilter: 'blur(3px)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              Your Upload
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '0.62rem', fontWeight: 600, background: 'rgba(15, 23, 42, 0.75)', color: '#E2E8F0', padding: '2px 6px', borderRadius: '4px', backdropFilter: 'blur(3px)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                              External Ref
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Remove button for user-uploaded references */}
+                        {item.source_domain === 'Local Upload' && (
+                          <button
+                            type="button"
+                            onClick={(e) => handleRemoveUploadedReference(e, item.id)}
+                            title="Remove uploaded reference"
+                            style={{
+                              position: 'absolute',
+                              bottom: '8px',
+                              left: '8px',
+                              background: 'rgba(15, 23, 42, 0.8)',
+                              border: '1px solid rgba(255, 255, 255, 0.2)',
+                              color: '#FCA5A5',
+                              padding: '2px 7px',
+                              borderRadius: '4px',
+                              fontSize: '0.65rem',
+                              cursor: 'pointer',
+                              fontWeight: 600,
+                              zIndex: 3
+                            }}
+                          >
+                            &times; Remove
+                          </button>
+                        )}
+
+                        {/* Bottom-Right Badge: Genuine retrieval relevance score */}
+                        {typeof item.overall_score === 'number' && item.overall_score > 0 && (
+                          <div style={{ position: 'absolute', bottom: '8px', right: '8px' }}>
+                            <span 
+                              style={{ fontSize: '0.66rem', fontWeight: 600, background: 'rgba(15, 23, 42, 0.82)', color: '#FFFFFF', padding: '2px 7px', borderRadius: '4px', backdropFilter: 'blur(3px)' }}
+                              title={`Retrieval relevance score (${Math.round((item.relevance_score ?? item.overall_score) * 100)}%): Evaluated based on semantic keyword match against campaign concept and visual direction`}
+                            >
+                              {Math.round((item.relevance_score ?? item.overall_score) * 100)}% Relevance
                             </span>
                           </div>
                         )}
                       </div>
 
-                      <div style={{ padding: '8px 10px' }}>
-                        <div style={{ fontSize: '0.78rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.title}>
-                          {item.title}
-                        </div>
-                        {item.source_domain && (
-                          <div style={{ fontSize: '0.68rem', color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '2px' }}>
-                            {item.source_domain}
+                      {/* Card Content & Provenance Information */}
+                      <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', flexGrow: 1, justifyContent: 'space-between', gap: '10px' }}>
+                        <div>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={item.title}>
+                            {item.title}
                           </div>
-                        )}
-                        <div style={{ fontSize: '0.72rem', color: isReferenced ? '#1A73E8' : 'var(--text-muted)', marginTop: '4px', fontWeight: isReferenced ? 700 : 400 }}>
-                          {isReferenced ? 'Click to Deselect' : 'Click to Use as Reference'}
+
+                          {/* Source Transparency & Subtle View Source Link */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '6px' }}>
+                            <div 
+                              style={{ fontSize: '0.72rem', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} 
+                              title={item.source_domain || 'Web source'}
+                            >
+                              <span>{item.source_domain === 'Local Upload' ? '📁' : '🌐'}</span>
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {item.source_domain === 'Local Upload' ? 'Custom User Upload' : (item.source_domain || 'Web Reference')}
+                              </span>
+                            </div>
+
+                            {item.source_domain !== 'Local Upload' && (item.source_url || item.image_url) && (
+                              <a
+                                href={item.source_url || item.image_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                title="View original webpage context (opens in new tab)"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '2px',
+                                  fontSize: '0.70rem',
+                                  fontWeight: 500,
+                                  color: '#1A73E8',
+                                  textDecoration: 'none',
+                                  padding: '2px 7px',
+                                  borderRadius: '4px',
+                                  background: '#EFF6FF',
+                                  border: '1px solid #BFDBFE',
+                                  flexShrink: 0
+                                }}
+                              >
+                                <span>View Source ↗</span>
+                              </a>
+                            )}
+                          </div>
+
+                          <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '6px', fontStyle: 'italic' }}>
+                            {item.source_domain === 'Local Upload' 
+                              ? 'Your uploaded image • Injected as reference style guidance' 
+                              : 'Style inspiration only • Not cleared for commercial reuse'}
+                          </div>
+                        </div>
+
+                        {/* Interactive Selection Footer */}
+                        <div style={{ 
+                          paddingTop: '8px', 
+                          borderTop: '1px solid ' + (isReferenced ? '#BFDBFE' : '#F1F5F9'),
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'space-between',
+                          fontSize: '0.74rem'
+                        }}>
+                          <span style={{ fontWeight: isReferenced ? 700 : 500, color: isReferenced ? '#1A73E8' : 'var(--text-secondary)' }}>
+                            {isReferenced ? '✓ Active Inspiration Aid' : 'Click to Use as Reference'}
+                          </span>
+                          <span style={{ fontSize: '0.70rem', color: isReferenced ? '#1A73E8' : 'var(--text-muted)' }}>
+                            {isReferenced ? 'Deselect' : 'Select'}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -3782,7 +4793,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                     borderRadius: '7px',
                     border: 'none',
                     background: mediaMode === 'video' ? '#FFFFFF' : 'transparent',
-                    color: mediaMode === 'video' ? '#8B5CF6' : '#64748B',
+                    color: mediaMode === 'video' ? '#0F9D9A' : '#64748B',
                     fontWeight: mediaMode === 'video' ? 700 : 500,
                     fontSize: '0.86rem',
                     cursor: 'pointer',
@@ -3800,12 +4811,12 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
               </div>
 
               {mediaMode === 'video' && startingImageForVideo && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#F5F3FF', border: '1px solid #DDD6FE', padding: '6px 12px', borderRadius: '8px' }}>
-                  <span style={{ fontSize: '0.78rem', color: '#6D28D9', fontWeight: 600 }}>Mode: Image-to-Video Animation</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--brand-teal-subtle)', border: '1px solid var(--brand-teal-border)', padding: '6px 12px', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '0.78rem', color: '#0F766E', fontWeight: 600 }}>Mode: Image-to-Video Animation</span>
                   <button 
                     type="button" 
                     onClick={() => setStartingImageForVideo(null)}
-                    style={{ background: 'none', border: 'none', color: '#9333EA', cursor: 'pointer', fontSize: '0.74rem', textDecoration: 'underline' }}
+                    style={{ background: 'none', border: 'none', color: '#0F9D9A', cursor: 'pointer', fontSize: '0.74rem', textDecoration: 'underline' }}
                   >
                     Clear starting frame
                   </button>
@@ -3893,9 +4904,34 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                     <label className="subheading-label">Visual Generation Prompt</label>
                     {selectedReferenceAsset && (
-                      <span className="badge badge-cyan" style={{ fontSize: '0.72rem' }}>
-                        Inspiration Attached: {selectedReferenceAsset.title.slice(0, 30)}...
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span className={`badge ${selectedReferenceAsset.source_domain === 'Local Upload' ? 'badge-purple' : 'badge-cyan'}`} style={{ fontSize: '0.72rem', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <span>{selectedReferenceAsset.source_domain === 'Local Upload' ? '📁 Custom Ref:' : 'Inspiration Attached:'}</span>
+                          <span style={{ maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {selectedReferenceAsset.title}
+                          </span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedReferenceAsset(null);
+                            setImagePrompt(activeConcept?.visual_direction || activeConcept?.search_query || '');
+                            notify('Removed reference inspiration aid.', 'info');
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            lineHeight: 1,
+                            padding: '0 2px'
+                          }}
+                          title="Detach reference"
+                        >
+                          &times;
+                        </button>
+                      </div>
                     )}
                   </div>
                   <textarea 
@@ -3971,7 +5007,18 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                         return (
                           <div 
                             key={img.id}
-                            onClick={() => setHeroAsset({ url: img.url, base64: img.image_base64, title: `Campaign Image Candidate #${idx + 1}`, media_type: 'image' })}
+                            onClick={() => {
+                              const isRetouched = img.enhanced_prompt?.startsWith('[Retouched]');
+                              setHeroAsset({
+                                url: img.url,
+                                base64: img.image_base64,
+                                title: isRetouched ? img.enhanced_prompt?.replace('[Retouched] ', 'Retouched: ') : `Campaign Image Candidate #${idx + 1}`,
+                                media_type: 'image',
+                                is_retouched: isRetouched,
+                                retouch_prompt: isRetouched ? img.enhanced_prompt?.replace('[Retouched] ', '') : undefined
+                              });
+                              setHeroAssetLoadFailed(false);
+                            }}
                             style={{
                               borderRadius: '10px',
                               overflow: 'hidden',
@@ -3992,9 +5039,15 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                               />
                               <div style={{ position: 'absolute', top: '8px', left: '8px' }}>
-                                <span className="badge badge-cyan" style={{ background: 'rgba(0,0,0,0.6)', color: '#FFF', fontSize: '0.72rem' }}>
-                                  Candidate #{idx + 1}
-                                </span>
+                                {img.enhanced_prompt?.startsWith('[Retouched]') ? (
+                                  <span className="badge badge-emerald" style={{ background: '#059669', color: '#FFF', fontSize: '0.72rem', fontWeight: 700, boxShadow: '0 2px 6px rgba(0,0,0,0.3)' }}>
+                                    ✨ Retouched
+                                  </span>
+                                ) : (
+                                  <span className="badge badge-cyan" style={{ background: 'rgba(0,0,0,0.6)', color: '#FFF', fontSize: '0.72rem' }}>
+                                    Candidate #{idx + 1}
+                                  </span>
+                                )}
                               </div>
                               {isSelected && (
                                 <div style={{ position: 'absolute', bottom: '8px', left: '8px' }}>
@@ -4021,9 +5074,9 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                                   gap: '4px',
                                   padding: '5px 9px',
                                   borderRadius: '6px',
-                                  border: '1px solid #DDD6FE',
-                                  background: '#F5F3FF',
-                                  color: '#7C3AED',
+                                  border: '1px solid var(--brand-teal-border)',
+                                  background: 'var(--brand-teal-subtle)',
+                                  color: '#0F766E',
                                   fontSize: '0.74rem',
                                   fontWeight: 600,
                                   cursor: 'pointer',
@@ -4106,13 +5159,23 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                   </div>
                 </div>
 
+                {/* Operational readiness notice if Veo engine lacks API credentials */}
+                {studioHealth && !studioHealth.has_gemini_key && (
+                  <div style={{ marginBottom: '16px', background: '#FEF7E0', border: '1px solid #FEEFC3', borderRadius: '8px', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <IconInfo size={20} color="#B06000" />
+                    <div style={{ flex: 1, fontSize: '0.84rem', color: '#B06000' }}>
+                      <strong>Video Engine Offline:</strong> Google Veo 2 video synthesis requires an active Gemini API key (<code style={{ background: '#FFF', padding: '1px 5px', borderRadius: '4px' }}>GEMINI_API_KEY</code>). Video generation is disabled until credentials are configured. Campaign image generation remains fully available.
+                    </div>
+                  </div>
+                )}
+
                 {/* Starting frame pill if Image-to-Video */}
                 {startingImageForVideo && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', background: '#FAF5FF', border: '1px solid #E9D5FF', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', background: 'var(--brand-teal-subtle)', border: '1px solid var(--brand-teal-border)', borderRadius: '8px', padding: '10px 14px', marginBottom: '16px' }}>
                     <img 
                       src={resolveImageSrc(startingImageForVideo.image_base64 || startingImageForVideo.url)} 
                       alt="Starting frame" 
-                      style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px', border: '1px solid #C084FC' }} 
+                      style={{ width: '48px', height: '48px', objectFit: 'cover', borderRadius: '6px', border: '1px solid var(--brand-teal-border)' }} 
                     />
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#581C87' }}>Starting Frame Locked</div>
@@ -4121,7 +5184,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                     <button 
                       type="button" 
                       className="btn-outline" 
-                      style={{ fontSize: '0.75rem', padding: '4px 10px', borderColor: '#C084FC', color: '#6B21A8' }}
+                      style={{ fontSize: '0.75rem', padding: '4px 10px', borderColor: 'var(--brand-teal-border)', color: '#0F766E' }}
                       onClick={() => setStartingImageForVideo(null)}
                     >
                       Remove Frame (Use Text-to-Video)
@@ -4144,7 +5207,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                       <button
                         type="button"
                         onClick={() => setVideoPrompt(activeConcept.veo_motion_prompt || activeConcept.visual_direction || '')}
-                        style={{ background: 'none', border: 'none', color: '#7C3AED', fontSize: '0.72rem', cursor: 'pointer', textDecoration: 'underline' }}
+                        style={{ background: 'none', border: 'none', color: '#0F9D9A', fontSize: '0.72rem', cursor: 'pointer', textDecoration: 'underline' }}
                         title="Sync with the active creative concept"
                       >
                         Reset to Concept Motion Prompt
@@ -4165,9 +5228,24 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginBottom: '24px' }}>
                   <button 
                     className="btn-primary" 
-                    style={{ padding: '12px 28px', fontSize: '0.95rem', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, background: 'linear-gradient(135deg, #7C3AED, #9333EA)' }}
-                    onClick={() => triggerGenerateVideo(videoPrompt)}
-                    disabled={isGeneratingVideo}
+                    style={{ 
+                      padding: '12px 28px', 
+                      fontSize: '0.95rem', 
+                      display: 'flex', 
+                      alignItems: 'center', 
+                      gap: '8px', 
+                      fontWeight: 700, 
+                      background: studioHealth && !studioHealth.has_gemini_key ? '#94A3B8' : '#0F9D9A',
+                      cursor: studioHealth && !studioHealth.has_gemini_key ? 'not-allowed' : 'pointer'
+                    }}
+                    onClick={() => {
+                      if (studioHealth && !studioHealth.has_gemini_key) {
+                        notify('Video synthesis requires GEMINI_API_KEY to be configured in backend settings.', 'info');
+                        return;
+                      }
+                      triggerGenerateVideo(videoPrompt);
+                    }}
+                    disabled={isGeneratingVideo || (studioHealth !== null && !studioHealth.has_gemini_key)}
                   >
                     {isGeneratingVideo ? (
                       <>
@@ -4186,7 +5264,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                 {/* Generated Videos Gallery */}
                 <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '20px' }}>
                   <h4 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '6px', color: 'var(--text-primary)' }}>
-                    Generated Campaign Videos ({isGeneratingVideo ? 'Cooking...' : `${generatedVideos.length} Videos`})
+                    Generated Campaign Videos ({isGeneratingVideo ? 'Cooking...' : `${generatedVideos.length} Video${generatedVideos.length === 1 ? '' : 's'}`})
                   </h4>
                   <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
                     Preview generated videos. Select any video as the active hero asset to publish to social channels or download as MP4.
@@ -4200,7 +5278,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                     </div>
                   ) : generatedVideos.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '36px', background: '#F8FAFC', borderRadius: '8px' }}>
-                      <IconVideo size={28} color="#8B5CF6" />
+                      <IconVideo size={28} color="#0F9D9A" />
                       <div style={{ marginTop: '10px', fontWeight: 600, fontSize: '0.95rem' }}>No campaign videos generated yet</div>
                       <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '4px' }}>
                         Click "Generate Cinematic Video with Google Veo" above to synthesize dynamic video content.
@@ -4213,13 +5291,20 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                         return (
                           <div 
                             key={vid.id || idx}
-                            onClick={() => setHeroAsset({ url: vid.video_url, title: `Veo Video (${vid.aspect_ratio}, ${vid.duration_seconds}s)`, media_type: 'video' })}
+                            onClick={() => {
+                              setHeroAsset({ 
+                                url: vid.video_url, 
+                                title: `Veo Video (${vid.aspect_ratio}, ${vid.duration_seconds}s)`, 
+                                media_type: 'video' 
+                              });
+                              setHeroAssetLoadFailed(false);
+                            }}
                             style={{
                               borderRadius: '10px',
                               overflow: 'hidden',
                               background: '#FFFFFF',
-                              border: isSelected ? '2.5px solid #7C3AED' : '1px solid var(--border-subtle)',
-                              boxShadow: isSelected ? '0 4px 18px rgba(124,58,237,0.2)' : 'var(--shadow-card)',
+                              border: isSelected ? '2.5px solid #0F9D9A' : '1px solid var(--border-subtle)',
+                              boxShadow: isSelected ? '0 4px 18px rgba(15,157,154,0.2)' : 'var(--shadow-card)',
                               cursor: 'pointer',
                               transition: 'all 0.2s ease',
                               display: 'flex',
@@ -4232,12 +5317,12 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                                 src={resolveImageSrc(vid.video_url)} 
                                 controls 
                                 playsInline 
-                                preload="auto"
+                                preload="metadata"
                                 onClick={(e) => e.stopPropagation()}
                                 style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                               />
                               <div style={{ position: 'absolute', top: '8px', left: '8px', pointerEvents: 'none' }}>
-                                <span className="badge badge-purple" style={{ background: 'rgba(0,0,0,0.7)', color: '#FFF', fontSize: '0.72rem' }}>
+                                <span className="badge badge-cyan" style={{ background: 'rgba(0,0,0,0.7)', color: '#FFF', fontSize: '0.72rem' }}>
                                   {vid.model_used || 'Google Veo'} &bull; {vid.duration_seconds}s
                                 </span>
                               </div>
@@ -4252,7 +5337,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
 
                             <div style={{ padding: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                               <div>
-                                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: isSelected ? '#7C3AED' : 'var(--text-primary)' }}>
+                                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: isSelected ? '#0F9D9A' : 'var(--text-primary)' }}>
                                   {isSelected ? '✓ Selected for Publishing' : 'Click to Set as Active Hero Asset'}
                                 </div>
                                 <div style={{ fontSize: '0.72rem', color: '#64748B', marginTop: '2px' }}>
@@ -4265,7 +5350,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                                 target="_blank"
                                 rel="noreferrer"
                                 onClick={(e) => e.stopPropagation()}
-                                style={{ fontSize: '0.74rem', color: '#7C3AED', textDecoration: 'none', fontWeight: 600, padding: '4px 8px', borderRadius: '4px', background: '#F5F3FF', border: '1px solid #DDD6FE' }}
+                                style={{ fontSize: '0.74rem', color: '#0F766E', textDecoration: 'none', fontWeight: 600, padding: '4px 8px', borderRadius: '4px', background: 'var(--brand-teal-subtle)', border: '1px solid var(--brand-teal-border)' }}
                               >
                                 Download MP4
                               </a>
@@ -4280,63 +5365,328 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
             )}
           </div>
 
-          {/* Active Asset Focus Dock: Two Clear Actions (Retouch with Natural Language | Ready to Publish) */}
+          {/* Active Asset Focus Dock */}
           {heroAsset && (
-            <div className="glass-card animate-fade-in" style={{ background: '#FFFFFF', border: '1.5px solid #1A73E8', padding: '20px', boxShadow: '0 4px 20px rgba(26,115,232,0.1)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: isRetouchOpen ? '18px' : '0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                  <div style={{ position: 'relative', width: '70px', height: '70px', borderRadius: '8px', overflow: 'hidden', background: '#0F172A', border: '2px solid #1A73E8', flexShrink: 0 }}>
-                    {heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4') ? (
-                      <video src={resolveImageSrc(heroAsset.url)} autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    ) : (
-                      <img src={resolveImageSrc(heroAsset.base64 || heroAsset.url)} alt="Active" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    )}
-                    {isEditingAsset && (
-                      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <span className="pulsing-cook-dot" style={{ background: '#FFF' }} />
+            <div className="glass-card animate-fade-in" style={{ background: '#FFFFFF', border: heroAssetLoadFailed ? '1.5px solid var(--status-error)' : '1.5px solid #1A73E8', padding: '20px', boxShadow: '0 4px 20px rgba(26,115,232,0.1)' }}>
+              {heroAssetLoadFailed ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{ width: '48px', height: '48px', borderRadius: '8px', background: '#FCE8E6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <IconAlertTriangle size={24} color="var(--status-error)" />
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '0.98rem', color: 'var(--status-error)' }}>
+                        Selected Asset Unavailable or Inaccessible
                       </div>
-                    )}
+                      <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        The asset URL could not be loaded or is unavailable from local media storage. Please select an alternate candidate from the gallery above or generate new visuals.
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)' }}>
-                        {heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4') ? 'Selected Campaign Video' : 'Selected Campaign Artwork'}
-                      </span>
-                      <span className="badge badge-emerald">Ready</span>
-                      {(heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4')) && (
-                        <span className="badge badge-purple" style={{ background: '#EDE9FE', color: '#7C3AED', fontSize: '0.72rem' }}>
-                          Google Veo
-                        </span>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    {generatedImages.length > 0 && (
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        style={{ fontSize: '0.84rem', padding: '8px 16px' }}
+                        onClick={() => {
+                          const first = generatedImages[0];
+                          setHeroAsset({
+                            url: first.url,
+                            base64: first.image_base64,
+                            title: 'Campaign Image Candidate #1',
+                            media_type: 'image'
+                          });
+                          setHeroAssetLoadFailed(false);
+                        }}
+                      >
+                        Select Candidate #1
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      style={{ fontSize: '0.84rem', padding: '8px 16px' }}
+                      onClick={() => {
+                        setHeroAsset(null);
+                        setHeroAssetLoadFailed(false);
+                      }}
+                    >
+                      Clear Selection
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: (isRetouchOpen || heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4')) ? '18px' : '0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                      <div style={{ position: 'relative', width: '70px', height: '70px', borderRadius: '8px', overflow: 'hidden', background: '#0F172A', border: '2px solid #1A73E8', flexShrink: 0 }}>
+                        {heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4') ? (
+                          <video 
+                            src={resolveImageSrc(heroAsset.url)} 
+                            autoPlay 
+                            loop 
+                            muted 
+                            playsInline 
+                            onError={() => setHeroAssetLoadFailed(true)} 
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                          />
+                        ) : (
+                          <img 
+                            src={resolveImageSrc(heroAsset.base64 || heroAsset.url)} 
+                            alt="Active" 
+                            onError={() => setHeroAssetLoadFailed(true)} 
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                          />
+                        )}
+                        {isEditingAsset && (
+                          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <span className="pulsing-cook-dot" style={{ background: '#FFF' }} />
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)' }}>
+                            {heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4') ? 'Selected Campaign Video' : 'Selected Campaign Artwork'}
+                          </span>
+                          <span className="badge badge-emerald">Active Selection</span>
+                          {(heroAsset.is_retouched || heroAsset.title?.startsWith('Retouched:')) && (
+                            <span className="badge badge-emerald" style={{ background: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC', fontSize: '0.72rem', fontWeight: 700 }}>
+                              ✨ Retouched
+                            </span>
+                          )}
+                          {(heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4')) && (
+                            <span className="badge badge-purple" style={{ background: '#EDE9FE', color: '#7C3AED', fontSize: '0.72rem' }}>
+                              Google Veo
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                          {heroAsset.title || 'Active Campaign Asset'} &bull; Selected for Stage 4 publishing.
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                      {!(heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4')) && (
+                        <button 
+                          className={isRetouchOpen ? 'btn-primary' : 'btn-outline'} 
+                          style={{ padding: '10px 18px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem' }}
+                          onClick={() => setIsRetouchOpen(!isRetouchOpen)}
+                        >
+                          <IconBrush size={16} />
+                          <span>{isRetouchOpen ? 'Hide Retouch Studio' : 'Edit with Natural Language'}</span>
+                        </button>
                       )}
                     </div>
-                    <div style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                      {heroAsset.title || 'Active Campaign Asset'} &bull; Ready to publish.
-                    </div>
                   </div>
-                </div>
 
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                  {!(heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4')) && (
-                    <button 
-                      className={isRetouchOpen ? 'btn-primary' : 'btn-outline'} 
-                      style={{ padding: '10px 18px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem' }}
-                      onClick={() => setIsRetouchOpen(!isRetouchOpen)}
-                    >
-                      <IconBrush size={16} />
-                      <span>{isRetouchOpen ? 'Hide Retouch Studio' : 'Edit with Natural Language'}</span>
-                    </button>
+                  {/* Dedicated Responsive Showcase for Active Video Asset */}
+                  {(heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4')) && (
+                    <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #E2E8F0' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span className="badge badge-cyan" style={{ fontSize: '0.78rem', fontWeight: 700 }}>
+                            Active Campaign Video (Veo 2)
+                          </span>
+                          <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
+                            High-definition MP4 asset preview with playback controls
+                          </span>
+                        </div>
+                        <a
+                          href={resolveImageSrc(heroAsset.url)}
+                          download="campaign_video.mp4"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn-outline"
+                          style={{ fontSize: '0.78rem', padding: '5px 12px', display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none', color: '#0F766E', borderColor: 'var(--brand-teal-border)', background: 'var(--brand-teal-subtle)' }}
+                        >
+                          <IconDownload size={14} />
+                          <span>Download MP4</span>
+                        </a>
+                      </div>
+
+                      <div style={{ borderRadius: '10px', overflow: 'hidden', border: '1.5px solid #0F9D9A', background: '#0F172A', maxHeight: '380px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <video 
+                          src={resolveImageSrc(heroAsset.url)} 
+                          controls 
+                          playsInline 
+                          preload="auto"
+                          style={{ width: '100%', maxHeight: '380px', objectFit: 'contain' }} 
+                        />
+                      </div>
+                    </div>
                   )}
 
-                  <button 
-                    className="btn-emerald" 
-                    style={{ padding: '11px 24px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.92rem', fontWeight: 700 }}
-                    onClick={handleProceedToPublish}
-                  >
-                    <IconSend size={16} />
-                    <span>Ready to Publish →</span>
-                  </button>
+              {/* Prominent Showcase for Retouched / Updated Asset */}
+              {(heroAsset.is_retouched || heroAsset.title?.startsWith('Retouched:')) && (
+                <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid #E2E8F0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span className="badge badge-emerald" style={{ fontSize: '0.78rem', fontWeight: 700, background: '#DCFCE7', color: '#166534', border: '1px solid #86EFAC' }}>
+                        ✨ Updated Asset Ready
+                      </span>
+                      <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
+                        Retouch applied: <strong style={{ color: 'var(--text-primary)' }}>"{heroAsset.retouch_prompt || editorPrompt || heroAsset.title?.replace('Retouched: ', '')}"</strong>
+                      </span>
+                    </div>
+                    {heroAsset.original_url && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setHeroAsset({
+                            url: heroAsset.original_url!,
+                            base64: heroAsset.original_base64,
+                            title: 'Campaign Artwork (Original)',
+                            media_type: 'image',
+                            is_retouched: false
+                          });
+                          notify('Reverted back to original unretouched artwork.', 'info');
+                        }}
+                        className="btn-outline"
+                        style={{ padding: '4px 10px', fontSize: '0.75rem', color: '#64748B' }}
+                      >
+                        Revert to Original
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Side-by-Side Comparison if Original Available, or Large HD Showcase */}
+                  {heroAsset.original_url ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', alignItems: 'stretch' }}>
+                      {/* Before: Original Artwork */}
+                      <div style={{ borderRadius: '10px', overflow: 'hidden', border: '1px solid #E2E8F0', background: '#F8FAFC', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ padding: '8px 12px', background: '#F1F5F9', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#475569' }}>ORIGINAL BEFORE RETOUCH</span>
+                          <span style={{ fontSize: '0.72rem', color: '#64748B' }}>Candidate</span>
+                        </div>
+                        <div style={{ position: 'relative', height: '280px', background: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <img 
+                            src={resolveImageSrc(heroAsset.original_base64 || heroAsset.original_url)} 
+                            alt="Original Before Retouch" 
+                            style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+                          />
+                        </div>
+                      </div>
+
+                      {/* After: Updated Retouched Artwork */}
+                      <div style={{ borderRadius: '10px', overflow: 'hidden', border: '2px solid #059669', background: '#F0FDF4', boxShadow: '0 4px 18px rgba(5,150,105,0.18)', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ padding: '8px 12px', background: '#DCFCE7', borderBottom: '1px solid #86EFAC', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#166534' }}>✨ UPDATED ARTWORK (ACTIVE FOR PUBLISHING)</span>
+                          <span className="badge badge-emerald" style={{ background: '#166534', color: '#FFF', fontSize: '0.68rem', padding: '2px 6px' }}>✓ Selected</span>
+                        </div>
+                        <div style={{ position: 'relative', height: '280px', background: '#0F172A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <img 
+                            src={resolveImageSrc(heroAsset.base64 || heroAsset.url)} 
+                            alt="Updated Retouched Artwork" 
+                            style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+                          />
+                          <div style={{ position: 'absolute', bottom: '10px', right: '10px', display: 'flex', gap: '8px' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleAnimateImageWithVeo({
+                                id: 'retouched_active',
+                                url: heroAsset.url,
+                                image_base64: heroAsset.base64,
+                                mime_type: 'image/png'
+                              })}
+                              style={{
+                                fontSize: '0.74rem',
+                                padding: '5px 10px',
+                                background: '#0F9D9A',
+                                color: '#FFF',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                              title="Animate with Google Veo"
+                            >
+                              <IconVideo size={12} />
+                              <span>Animate</span>
+                            </button>
+                            <a
+                              href={resolveImageSrc(heroAsset.base64 || heroAsset.url)}
+                              download="retouched_campaign_artwork.png"
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                fontSize: '0.74rem',
+                                padding: '5px 10px',
+                                background: 'rgba(0,0,0,0.75)',
+                                color: '#FFF',
+                                borderRadius: '4px',
+                                textDecoration: 'none',
+                                fontWeight: 600,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                            >
+                              <IconDownload size={12} />
+                              <span>Download HD</span>
+                            </a>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Large Full Showcase Preview */
+                    <div style={{ borderRadius: '10px', overflow: 'hidden', border: '2px solid #059669', background: '#F0FDF4', padding: '16px', display: 'flex', gap: '20px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div style={{ width: '280px', height: '280px', borderRadius: '8px', overflow: 'hidden', background: '#0F172A', flexShrink: 0 }}>
+                        <img 
+                          src={resolveImageSrc(heroAsset.base64 || heroAsset.url)} 
+                          alt="Updated Retouched Asset" 
+                          style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+                        />
+                      </div>
+                      <div style={{ flex: 1, minWidth: '260px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                          <span className="badge badge-emerald" style={{ fontSize: '0.78rem', fontWeight: 700 }}>Updated Retouched Artwork</span>
+                          <span style={{ fontSize: '0.78rem', color: '#059669', fontWeight: 600 }}>Active for Publishing</span>
+                        </div>
+                        <h4 style={{ fontSize: '1.05rem', fontWeight: 700, margin: '0 0 6px 0', color: 'var(--text-primary)' }}>
+                          {heroAsset.title}
+                        </h4>
+                        <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: '0 0 16px 0' }}>
+                          The retouched visual incorporates your natural language edits and is ready for multi-channel publishing or animated video conversion with Google Veo.
+                        </p>
+                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="btn-outline"
+                            style={{ fontSize: '0.82rem', padding: '6px 14px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                            onClick={() => handleAnimateImageWithVeo({
+                              id: 'retouched_active',
+                              url: heroAsset.url,
+                              image_base64: heroAsset.base64,
+                              mime_type: 'image/png'
+                            })}
+                          >
+                            <IconVideo size={14} />
+                            <span>Animate with Google Veo</span>
+                          </button>
+                          <a
+                            href={resolveImageSrc(heroAsset.base64 || heroAsset.url)}
+                            download="retouched_campaign_artwork.png"
+                            target="_blank"
+                            rel="noreferrer"
+                            className="btn-outline"
+                            style={{ fontSize: '0.82rem', padding: '6px 14px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                          >
+                            <IconDownload size={14} />
+                            <span>Download HD PNG</span>
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
+              )}
 
               {/* Inline Natural Language Retouch Drawer */}
               {isRetouchOpen && (
@@ -4391,6 +5741,8 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                     </button>
                   </div>
                 </div>
+              )}
+                </>
               )}
             </div>
           )}
@@ -4452,16 +5804,66 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                   marginBottom: '20px' 
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <IconLock size={16} color="var(--action-primary)" />
                     <span style={{ fontWeight: 700, fontSize: '0.92rem' }}>
                       In-Place Channel Credentials Configuration
                     </span>
                   </div>
-                  <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                    Saved for current session dispatch
-                  </span>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <button
+                      type="button"
+                      className={`btn-ghost ${publishChannel === 'facebook' ? 'active' : ''}`}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '0.74rem',
+                        fontWeight: 600,
+                        borderRadius: '6px',
+                        background: publishChannel === 'facebook' ? '#1877F2' : '#F1F5F9',
+                        color: publishChannel === 'facebook' ? '#FFF' : '#475569',
+                        border: 'none',
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => setPublishChannel('facebook')}
+                    >
+                      Facebook {(fbPageId.trim() && fbAccessToken.trim()) ? '● Ready' : ''}
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-ghost ${publishChannel === 'instagram' ? 'active' : ''}`}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '0.74rem',
+                        fontWeight: 600,
+                        borderRadius: '6px',
+                        background: publishChannel === 'instagram' ? '#E1306C' : '#F1F5F9',
+                        color: publishChannel === 'instagram' ? '#FFF' : '#475569',
+                        border: 'none',
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => setPublishChannel('instagram')}
+                    >
+                      Instagram {(igUserId.trim() && igAccessToken.trim()) ? '● Ready' : ''}
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-ghost ${publishChannel === 'email' ? 'active' : ''}`}
+                      style={{
+                        padding: '4px 10px',
+                        fontSize: '0.74rem',
+                        fontWeight: 600,
+                        borderRadius: '6px',
+                        background: publishChannel === 'email' ? '#4F46E5' : '#F1F5F9',
+                        color: publishChannel === 'email' ? '#FFF' : '#475569',
+                        border: 'none',
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => setPublishChannel('email')}
+                    >
+                      Email {((sendgridApiKey.trim() || smtpHost.trim()) && fromEmail.trim()) ? '● Ready' : ''}
+                    </button>
+                  </div>
                 </div>
 
                 {publishChannel === 'instagram' && (
@@ -5155,6 +6557,23 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                     ))}
                   </div>
                 </div>
+
+                {!publishingStatus?.instagram.configured && (!igUserId.trim() || !igAccessToken.trim()) && (
+                  <div style={{ marginBottom: '14px', padding: '10px 14px', borderRadius: '8px', background: '#FEF3C7', border: '1px solid #FCD34D', color: '#92400E', fontSize: '0.82rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                    <span>⚠️ Instagram credentials not detected.</span>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      style={{ padding: '3px 8px', fontSize: '0.75rem', background: '#FFF' }}
+                      onClick={() => {
+                        setPublishChannel('instagram');
+                        setShowCredentialsPanel(true);
+                      }}
+                    >
+                      Configure Credentials
+                    </button>
+                  </div>
+                )}
 
                 <button 
                   className="btn-primary" 

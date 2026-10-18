@@ -50,6 +50,42 @@ def normalize_image_url(url: str) -> str:
         return url.strip()
 
 
+def is_likely_watermarked(cand: Dict[str, Any]) -> bool:
+    """
+    Detects whether an image candidate originates from a known watermarked stock repository
+    or has prominent watermark indicators in its URL or metadata.
+    """
+    img_url = (cand.get("image_url") or "").lower()
+    thumb_url = (cand.get("thumbnail_url") or "").lower()
+    title = (cand.get("title") or "").lower()
+    snippet = (cand.get("snippet") or "").lower()
+    source = (cand.get("source_domain") or "").lower()
+    source_url = (cand.get("source_url") or "").lower()
+    combined = f"{img_url} {thumb_url} {title} {snippet} {source} {source_url}"
+
+    watermark_terms = [
+        "shutterstock",
+        "gettyimages",
+        "getty images",
+        "istockphoto",
+        "istock",
+        "alamy.com",
+        "c8.alamy",
+        "dreamstime",
+        "123rf",
+        "depositphotos",
+        "bigstockphoto",
+        "canstockphoto",
+        "vectorstock",
+        "watermarked",
+        "watermark",
+    ]
+    for term in watermark_terms:
+        if term in combined:
+            return True
+    return False
+
+
 def deduplicate_image_candidates(candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Deduplicates a list of image candidate dictionaries using canonical URLs and IDs."""
     seen_canonical_keys: Set[str] = set()
@@ -138,6 +174,8 @@ def clean_and_optimize_query(
 class ImageSearchService:
     def __init__(self):
         self.last_optimized_query: Optional[str] = None
+        self.last_provider_used: Optional[str] = None
+        self.last_provider_display: Optional[str] = None
 
     async def search_google_cse(
         self,
@@ -174,16 +212,20 @@ class ImageSearchService:
             link = item.get("link", "")
             if not link:
                 continue
-            candidates.append({
+            source_url = img_info.get("contextLink") or item.get("link", "")
+            cand = {
                 "id": f"gcse_{i}_{abs(hash(link)) % 100000}",
                 "image_url": link,
                 "thumbnail_url": img_info.get("thumbnailLink", link),
                 "title": item.get("title", ""),
                 "snippet": item.get("snippet", ""),
                 "source_domain": item.get("displayLink", ""),
+                "source_url": source_url,
                 "width": img_info.get("width"),
                 "height": img_info.get("height"),
-            })
+            }
+            cand["is_watermarked"] = is_likely_watermarked(cand)
+            candidates.append(cand)
         return deduplicate_image_candidates(candidates)
 
     async def search_serpapi(
@@ -219,16 +261,21 @@ class ImageSearchService:
             original = item.get("original", "")
             if not original:
                 continue
-            candidates.append({
+            source_url = item.get("link") or original
+            source_domain = item.get("source") or urllib.parse.urlparse(source_url).netloc or "Google Images"
+            cand = {
                 "id": f"serp_{i}_{abs(hash(original)) % 100000}",
                 "image_url": original,
                 "thumbnail_url": item.get("thumbnail", original),
                 "title": item.get("title", ""),
                 "snippet": item.get("source", ""),
-                "source_domain": item.get("source", "Google Images"),
+                "source_domain": source_domain,
+                "source_url": source_url,
                 "width": item.get("original_width"),
                 "height": item.get("original_height"),
-            })
+            }
+            cand["is_watermarked"] = is_likely_watermarked(cand)
+            candidates.append(cand)
         return deduplicate_image_candidates(candidates)
 
     async def search_web_fallback(self, query: str, num_results: int = 10) -> List[Dict[str, Any]]:
@@ -278,16 +325,20 @@ class ImageSearchService:
                             if not img_url:
                                 continue
                             domain = urllib.parse.urlparse(r.get("url", "")).netloc or "web"
-                            candidates.append({
+                            source_url = r.get("url") or img_url
+                            cand = {
                                 "id": f"ddg_{i}_{abs(hash(img_url)) % 100000}",
                                 "image_url": img_url,
                                 "thumbnail_url": r.get("thumbnail", img_url),
                                 "title": r.get("title", ""),
                                 "snippet": r.get("source", ""),
                                 "source_domain": domain,
+                                "source_url": source_url,
                                 "width": r.get("width"),
                                 "height": r.get("height"),
-                            })
+                            }
+                            cand["is_watermarked"] = is_likely_watermarked(cand)
+                            candidates.append(cand)
         except Exception as e:
             logger.warning(f"Web image search fallback encountered error: {type(e).__name__}")
 
@@ -337,45 +388,72 @@ class ImageSearchService:
                     seen_keys.add(normalize_image_url(thumb))
                 collected_candidates.append(item)
 
+        self.last_provider_used = None
+        self.last_provider_display = None
+
+        target_pool = max(num_results * 2, 16)
+
         # 1. Try SerpApi (if available or auto)
         if provider in ("serpapi", "auto") and (serpapi_key or settings.SERPAPI_API_KEY):
             try:
                 res = await self.search_serpapi(
                     query=optimized_q,
-                    num_results=num_results,
+                    num_results=target_pool,
                     api_key=serpapi_key,
                 )
+                if res:
+                    self.last_provider_used = "serpapi"
+                    self.last_provider_display = "Google Images (via SerpApi)"
                 _add_candidates(res)
-                if len(collected_candidates) >= num_results:
-                    return collected_candidates[:num_results]
             except Exception as e:
                 logger.warning(f"SerpApi image search failed ({type(e).__name__}). Proceeding to next provider.")
 
         # 2. Try Google CSE
-        if provider in ("google_cse", "auto") and (google_cse_key or getattr(settings, "GOOGLE_CSE_API_KEY", None)) and (google_cse_id or getattr(settings, "GOOGLE_CSE_ID", None)):
+        if len(collected_candidates) < target_pool and provider in ("google_cse", "auto") and (google_cse_key or getattr(settings, "GOOGLE_CSE_API_KEY", None)) and (google_cse_id or getattr(settings, "GOOGLE_CSE_ID", None)):
             try:
                 res = await self.search_google_cse(
                     query=optimized_q,
-                    num_results=num_results - len(collected_candidates),
+                    num_results=target_pool - len(collected_candidates),
                     api_key=google_cse_key,
                     cx=google_cse_id,
                 )
+                if res:
+                    self.last_provider_used = "google_cse"
+                    self.last_provider_display = "Google Custom Search Engine"
                 _add_candidates(res)
-                if len(collected_candidates) >= num_results:
-                    return collected_candidates[:num_results]
             except Exception as e:
                 logger.warning(f"Google CSE image search failed ({type(e).__name__}). Proceeding to next provider.")
 
         # 3. Public Web fallback (DuckDuckGo image search)
-        if len(collected_candidates) < num_results:
+        if len(collected_candidates) < target_pool:
             try:
-                needed = num_results - len(collected_candidates)
+                needed = target_pool - len(collected_candidates)
                 web_results = await self.search_web_fallback(query=optimized_q, num_results=needed)
+                if web_results and not self.last_provider_used:
+                    self.last_provider_used = "web_search"
+                    self.last_provider_display = "Public Web Visual Search"
                 _add_candidates(web_results)
             except Exception as e:
                 logger.warning(f"Web fallback image search failed ({type(e).__name__}).")
 
-        return collected_candidates[:num_results]
+        if not self.last_provider_display:
+            if not (serpapi_key or settings.SERPAPI_API_KEY) and not getattr(settings, "GOOGLE_CSE_API_KEY", None):
+                self.last_provider_display = "Public Web Visual Search"
+            else:
+                self.last_provider_display = "Google Images (via SerpApi)"
+
+        # Partition candidates into clean (unwatermarked) and watermarked
+        clean_candidates = [c for c in collected_candidates if not c.get("is_watermarked")]
+        watermarked_candidates = [c for c in collected_candidates if c.get("is_watermarked")]
+
+        # Exclude visibly watermarked images when suitable alternatives are available.
+        # Do not substitute unrelated stock imagery merely to fill the gallery.
+        if len(clean_candidates) >= num_results:
+            return clean_candidates[:num_results]
+
+        # If clean candidates alone are fewer than requested, return all clean ones first,
+        # followed by the most relevant watermarked candidates to reach the target count without filling with unrelated stock.
+        return (clean_candidates + watermarked_candidates)[:num_results]
 
 
 search_service = ImageSearchService()

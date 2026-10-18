@@ -149,7 +149,7 @@ def _resolve_credentials(
     if missing:
         raise ValueError(
             "Missing Instagram publishing credentials: "
-            f"{', '.join(missing)}. Provide them in the request or define them in your environment / .env file."
+            f"{', '.join(missing)}. Please set them in your .env file or enter them in 'Configure Publisher Credentials' in the Launch Room."
         )
 
     return InstagramCredentials(

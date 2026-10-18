@@ -113,6 +113,18 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
     }
   ];
 
+  const isAllHealthy = providerHealth
+    ? Boolean(providerHealth.all_healthy)
+    : displayProviders.every((p) => p.status === 'healthy');
+
+  const healthyCount = providerHealth?.healthy_count ?? displayProviders.filter((p) => p.status === 'healthy').length;
+  const totalCount = providerHealth?.total_count ?? displayProviders.length;
+  const healthHeadline = providerHealth?.headline || (
+    isAllHealthy
+      ? `All ${totalCount} Providers Operational`
+      : `${healthyCount} of ${totalCount} Providers Operational (${totalCount - healthyCount} Degraded)`
+  );
+
   const getProviderIcon = (id: string) => {
     switch (id) {
       case 'google_trends':
@@ -257,15 +269,15 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
               Verified runtime health of connected research pipelines driving audience ethnography and gap isolation.
             </span>
           </div>
-          {providerHealth?.all_healthy ? (
+          {isAllHealthy ? (
             <span className="badge badge-emerald" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span className="pulse-dot"></span>
-              <span>All 5 Providers Operational</span>
+              <span>{healthHeadline}</span>
             </span>
           ) : (
             <span className="badge badge-amber" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <IconAlertTriangle size={13} color="var(--warning-amber)" />
-              <span>{providerHealth?.headline || '4 of 5 Providers Operational (1 Degraded)'}</span>
+              <span>{healthHeadline}</span>
             </span>
           )}
         </div>

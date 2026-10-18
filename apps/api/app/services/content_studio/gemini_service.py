@@ -219,6 +219,25 @@ class GeminiImageService:
             if req.negative_prompt:
                 prompt_content = f"{final_prompt}\nAvoid: {req.negative_prompt}"
 
+            # Prepare contents payload, including optional reference image part
+            contents_payload: List[Any] = []
+            if req.reference_image_base64:
+                try:
+                    ref_bytes, ref_mime = clean_base64_string(req.reference_image_base64)
+                    contents_payload.append(types.Part.from_bytes(data=ref_bytes, mime_type=ref_mime))
+                    ref_guidance = (
+                        f"Use the provided reference image as visual aesthetic, style, and composition guidance for generating the following target image:\n"
+                        f"{prompt_content}"
+                    )
+                    contents_payload.append(ref_guidance)
+                except Exception as ref_err:
+                    logger.warning(f"Could not parse reference_image_base64: {ref_err}")
+                    contents_payload = [prompt_content]
+            else:
+                contents_payload = [prompt_content]
+
+            contents_to_send: Any = contents_payload if len(contents_payload) > 1 else prompt_content
+
             # Execute generation using generate_content
             count = max(1, min(req.number_of_images, 4))
             generated_items: List[GeneratedImageItem] = []
@@ -231,7 +250,7 @@ class GeminiImageService:
                 try:
                     response = client.models.generate_content(
                         model=model_name,
-                        contents=prompt_content,
+                        contents=contents_to_send,
                         config=types.GenerateContentConfig(**config_kwargs)
                     )
                 except Exception as exc:
@@ -239,14 +258,14 @@ class GeminiImageService:
                     try:
                         response = client.models.generate_content(
                             model=model_name,
-                            contents=prompt_content,
+                            contents=contents_to_send,
                             config=types.GenerateContentConfig(response_modalities=["IMAGE"])
                         )
                     except Exception as inner_exc:
                         logger.warning(f"generate_content with response_modalities=['IMAGE'] failed: {inner_exc}. Trying default config...")
                         response = client.models.generate_content(
                             model=model_name,
-                            contents=prompt_content
+                            contents=contents_to_send
                         )
 
                 batch_items, batch_texts = self._extract_images_from_content_response(

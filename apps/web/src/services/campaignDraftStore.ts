@@ -112,7 +112,6 @@ class CampaignDraftStore {
     this.inMemoryDrafts.set(draft.campaign_id, draft);
     this.setActiveCampaignId(draft.campaign_id);
     this.pendingDraftToSave = draft;
-    this.setStatus('saving');
 
     if (this.saveDebounceTimer) {
       clearTimeout(this.saveDebounceTimer);
@@ -140,6 +139,7 @@ class CampaignDraftStore {
 
     this.saveRequestId++;
     const thisRequestId = this.saveRequestId;
+    this.setStatus('saving');
 
     try {
       const sanitized = this.sanitizeDraftForStorage(draft);

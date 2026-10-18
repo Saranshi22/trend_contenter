@@ -31,54 +31,64 @@ def get_gemini_client(
         or ""
     ).strip()
 
-    explicit_base_url = (base_url or base_url_override or settings.GEMINI_BASE_URL or "").strip()
+    # Local testing variable: when enabled, routes Content Studio calls via LLM Gateway.
+    # To delete/disable later: set USE_LLM_GATEWAY_FOR_CONTENT_STUDIO=false or remove from .env.
+    use_gateway = (
+        getattr(settings, "USE_LLM_GATEWAY_FOR_CONTENT_STUDIO", False)
+        or os.environ.get("USE_LLM_GATEWAY_FOR_CONTENT_STUDIO", "false").strip().lower() in ("true", "1")
+    )
 
-    # When direct GEMINI_API_KEY is provided and no explicit base_url override is given,
-    # talk directly to Google AI Studio API without routing through the LLM gateway.
-    if gemini_key and not explicit_base_url:
-        logger.info("Configuring direct Google AI Studio Gemini client using GEMINI_API_KEY.")
-        return genai.Client(api_key=gemini_key)
+    if use_gateway:
+        target_base_url = (
+            base_url
+            or base_url_override
+            or getattr(settings, "LLM_GATEWAY_BASE_URL", "")
+            or os.environ.get("LLM_GATEWAY_BASE_URL")
+            or ""
+        ).strip()
+        gateway_token = (
+            getattr(settings, "LLM_GATEWAY_TOKEN", "")
+            or os.environ.get("LLM_GATEWAY_TOKEN")
+            or gemini_key
+            or "gateway-token"
+        ).strip()
 
-    token = gemini_key or (
-        settings.LLM_GATEWAY_TOKEN
-        or os.environ.get("LLM_GATEWAY_TOKEN")
-        or ""
-    ).strip()
+        if not target_base_url:
+            raise ValueError(
+                "USE_LLM_GATEWAY_FOR_CONTENT_STUDIO is true, but LLM_GATEWAY_BASE_URL is not set."
+            )
 
-    target_base_url = (
-        explicit_base_url
-        or settings.LLM_GATEWAY_BASE_URL
-        or os.environ.get("LLM_GATEWAY_BASE_URL")
-        or ""
-    ).strip()
-
-    if not token and not target_base_url:
-        raise ValueError(
-            "Gemini API Key or Gateway Token is missing. Please set GEMINI_API_KEY (or LLM_GATEWAY_TOKEN) in your environment or .env file."
-        )
-
-    auth_token = token or "gateway-token"
-    auth_header = auth_token if auth_token.startswith("Bearer ") else f"Bearer {auth_token}"
-
-    headers: Dict[str, str] = {
-        "Authorization": auth_header,
-    }
-
-    http_options_kwargs: Dict[str, Any] = {
-        "headers": headers,
-    }
-
-    if target_base_url:
+        auth_header = gateway_token if gateway_token.startswith("Bearer ") else f"Bearer {gateway_token}"
+        headers: Dict[str, str] = {
+            "Authorization": auth_header,
+        }
+        http_options_kwargs: Dict[str, Any] = {
+            "headers": headers,
+        }
         clean_url = target_base_url.rstrip("/")
         if clean_url.endswith("/v1beta"):
             http_options_kwargs["base_url"] = clean_url
             http_options_kwargs["api_version"] = ""
         else:
             http_options_kwargs["base_url"] = clean_url
-        logger.info(f"Configuring Gemini Client with Gateway base_url: {clean_url}")
+        logger.info(f"[LOCAL TESTING] Routing Content Studio via LLM Gateway: {clean_url}")
+        http_options = types.HttpOptions(**http_options_kwargs)
+        return genai.Client(api_key=gateway_token, http_options=http_options)
 
-    http_options = types.HttpOptions(**http_options_kwargs)
-    return genai.Client(api_key=auth_token, http_options=http_options)
+    # Standard direct Google AI Studio Gemini client (Production & Default)
+    explicit_base_url = (base_url or base_url_override or getattr(settings, "GEMINI_BASE_URL", "") or "").strip()
+    if explicit_base_url:
+        http_options = types.HttpOptions(base_url=explicit_base_url.rstrip("/"))
+        return genai.Client(api_key=gemini_key, http_options=http_options)
+
+    if gemini_key:
+        logger.info("Configuring direct Google AI Studio Gemini client using GEMINI_API_KEY.")
+        return genai.Client(api_key=gemini_key)
+
+    raise ValueError(
+        "GEMINI_API_KEY is missing. Please set GEMINI_API_KEY in your environment or .env file "
+        "(or set USE_LLM_GATEWAY_FOR_CONTENT_STUDIO=true with LLM_GATEWAY_BASE_URL for local testing)."
+    )
 
 
 def has_gemini_credentials(

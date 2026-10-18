@@ -7,7 +7,7 @@ from google.genai import types
 from ...config import settings
 from ...domain.models.content_studio import RecommendedImageItem
 from .gemini_client import get_gemini_client, has_gemini_credentials
-from .search_service import deduplicate_image_candidates
+from .search_service import deduplicate_image_candidates, is_likely_watermarked
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +122,11 @@ class RerankerService:
                     tags = ["reference"]
                 ovr = round(rel * 0.5 + aes * 0.3 + ctx * 0.2, 3)
 
+            is_wm = cand.get("is_watermarked", False) or is_likely_watermarked(cand)
+            if is_wm and aes is not None:
+                aes = max(0.35, round(aes - 0.20, 3))
+                ovr = round(rel * 0.5 + aes * 0.3 + ctx * 0.2, 3)
+
             results.append(RecommendedImageItem(
                 id=cand["id"],
                 image_url=cand["image_url"],
@@ -129,6 +134,8 @@ class RerankerService:
                 title=cand["title"],
                 snippet=cand.get("snippet", ""),
                 source_domain=cand.get("source_domain", ""),
+                source_url=cand.get("source_url") or cand["image_url"],
+                is_watermarked=is_wm,
                 width=cand.get("width"),
                 height=cand.get("height"),
                 relevance_score=round(rel, 3),
@@ -139,7 +146,8 @@ class RerankerService:
                 tags=tags,
             ))
 
-        results.sort(key=lambda x: x.overall_score, reverse=True)
+        # Prioritize clean, unwatermarked candidates when ranking references
+        results.sort(key=lambda x: (not x.is_watermarked, x.overall_score), reverse=True)
         return results
 
     def _heuristic_fallback(
@@ -169,7 +177,6 @@ class RerankerService:
             if matches > 0:
                 match_ratio = matches / max(len(meaningful_words), 1)
                 rel = round(min(0.92, 0.45 + match_ratio * 0.45), 3)
-                # Estimate aesthetic score mildly based on resolution availability
                 aes = 0.80 if (c.get("width") and c.get("width") >= 800) else 0.70
                 ctx = round(min(0.85, 0.50 + match_ratio * 0.35), 3)
                 reasoning = f"Visual metadata matched {matches} campaign keyword(s)."
@@ -181,6 +188,10 @@ class RerankerService:
                 reasoning = "Retrieved reference candidate with modest direct text keyword overlap."
                 tags = ["reference"]
 
+            is_wm = c.get("is_watermarked", False) or is_likely_watermarked(c)
+            if is_wm:
+                aes = max(0.35, round(aes - 0.20, 3))
+
             ovr = round(rel * 0.5 + aes * 0.3 + ctx * 0.2, 3)
 
             results.append(RecommendedImageItem(
@@ -190,6 +201,8 @@ class RerankerService:
                 title=c["title"],
                 snippet=c.get("snippet", ""),
                 source_domain=c.get("source_domain", ""),
+                source_url=c.get("source_url") or c["image_url"],
+                is_watermarked=is_wm,
                 width=c.get("width"),
                 height=c.get("height"),
                 relevance_score=round(rel, 3),
@@ -200,7 +213,8 @@ class RerankerService:
                 tags=tags,
             ))
 
-        results.sort(key=lambda x: x.overall_score, reverse=True)
+        # Prioritize clean, unwatermarked candidates when ranking references
+        results.sort(key=lambda x: (not x.is_watermarked, x.overall_score), reverse=True)
         return results
 
     async def rerank(
