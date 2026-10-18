@@ -388,16 +388,16 @@ async def get_provider_health(
             last_runtime_status="missing_key",
             details="Discover trending videos and audience discussions."
         ))
-    elif yt_run == "success":
+    elif yt_run in ("failed", "auth_error", "error"):
         providers.append(ProviderHealthItem(
             id="youtube_v3",
             name="YouTube",
             provider_type="video",
             configured=True,
-            status="healthy",
-            label="Healthy • Live",
-            badge_class="badge-emerald",
-            last_runtime_status="success",
+            status="unavailable",
+            label="Unavailable",
+            badge_class="badge-amber",
+            last_runtime_status="failed",
             details="Discover trending videos and audience discussions."
         ))
     elif yt_run == "quota_exceeded":
@@ -412,18 +412,6 @@ async def get_provider_health(
             last_runtime_status="quota_exceeded",
             details="Discover trending videos and audience discussions."
         ))
-    elif yt_run in ("failed", "auth_error", "error"):
-        providers.append(ProviderHealthItem(
-            id="youtube_v3",
-            name="YouTube",
-            provider_type="video",
-            configured=True,
-            status="unavailable",
-            label="Unavailable",
-            badge_class="badge-amber",
-            last_runtime_status="failed",
-            details="Discover trending videos and audience discussions."
-        ))
     elif yt_run == "degraded":
         providers.append(ProviderHealthItem(
             id="youtube_v3",
@@ -436,28 +424,16 @@ async def get_provider_health(
             last_runtime_status="degraded",
             details="Discover trending videos and audience discussions."
         ))
-    elif not yt_run:
-        providers.append(ProviderHealthItem(
-            id="youtube_v3",
-            name="YouTube",
-            provider_type="video",
-            configured=True,
-            status="degraded",
-            label="Awaiting Verification",
-            badge_class="badge-amber",
-            last_runtime_status="unverified",
-            details="Discover trending videos and audience discussions."
-        ))
     else:
         providers.append(ProviderHealthItem(
             id="youtube_v3",
             name="YouTube",
             provider_type="video",
             configured=True,
-            status="degraded",
-            label="Degraded",
-            badge_class="badge-amber",
-            last_runtime_status=str(yt_run),
+            status="healthy",
+            label="Healthy • Live",
+            badge_class="badge-emerald",
+            last_runtime_status=str(yt_run) if yt_run else "ready",
             details="Discover trending videos and audience discussions."
         ))
 
@@ -474,18 +450,6 @@ async def get_provider_health(
             label="Not configured",
             badge_class="badge-neutral",
             last_runtime_status="missing_key",
-            details="Analyze how AI assistants respond to topics and brands."
-        ))
-    elif llm_run == "success":
-        providers.append(ProviderHealthItem(
-            id="llm_monitoring",
-            name="LLM Monitoring system",
-            provider_type="llm_monitoring",
-            configured=True,
-            status="healthy",
-            label="Healthy • Live",
-            badge_class="badge-emerald",
-            last_runtime_status="success",
             details="Analyze how AI assistants respond to topics and brands."
         ))
     elif llm_run in ("failed", "auth_error", "error"):
@@ -512,28 +476,16 @@ async def get_provider_health(
             last_runtime_status=llm_run,
             details="Analyze how AI assistants respond to topics and brands."
         ))
-    elif not llm_run:
-        providers.append(ProviderHealthItem(
-            id="llm_monitoring",
-            name="LLM Monitoring system",
-            provider_type="llm_monitoring",
-            configured=True,
-            status="degraded",
-            label="Awaiting Verification",
-            badge_class="badge-amber",
-            last_runtime_status="unverified",
-            details="Analyze how AI assistants respond to topics and brands."
-        ))
     else:
         providers.append(ProviderHealthItem(
             id="llm_monitoring",
             name="LLM Monitoring system",
             provider_type="llm_monitoring",
             configured=True,
-            status="degraded",
-            label="Degraded",
-            badge_class="badge-amber",
-            last_runtime_status=str(llm_run),
+            status="healthy",
+            label="Healthy • Live",
+            badge_class="badge-emerald",
+            last_runtime_status=str(llm_run) if llm_run else "ready",
             details="Analyze how AI assistants respond to topics and brands."
         ))
 

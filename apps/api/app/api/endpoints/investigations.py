@@ -70,77 +70,77 @@ async def run_investigation_task(investigation_id: str, request: InvestigationRe
     user_id_str = str(getattr(user, "user_id", getattr(user, "id", "dev_user")))
     workspace_id_str = str(getattr(user, "workspace_id", "workspace_dev"))
 
-    # 1. Update status to running and retrieve trend_breakdown if related_topics is empty
-    related_topics = list(request.related_topics) if request.related_topics else []
-    trend_id_val = request.trend_id
-
-    async with AsyncSessionLocal() as session:
-        await session.execute(
-            text("""
-                UPDATE investigations
-                SET status = 'running', stage = 'Collecting trend context', updated_at = NOW()
-                WHERE investigation_id = :iid
-            """),
-            {"iid": investigation_id}
-        )
-        await session.execute(
-            text("UPDATE trends SET status = 'investigating' WHERE LOWER(topic) = LOWER(:t)"),
-            {"t": request.topic}
-        )
-
-        if not related_topics or not trend_id_val:
-            query = text("""
-                SELECT trend_id, trend_breakdown FROM trends 
-                WHERE LOWER(topic) = LOWER(:t) 
-                ORDER BY updated_at DESC LIMIT 1
-            """)
-            result = await session.execute(query, {"t": request.topic})
-            row = result.fetchone()
-            if row:
-                if not trend_id_val and row[0]:
-                    trend_id_val = str(row[0])
-                if not related_topics and row[1]:
-                    raw_bd = row[1]
-                    if isinstance(raw_bd, str):
-                        try:
-                            raw_bd = json.loads(raw_bd)
-                        except Exception:
-                            raw_bd = []
-                    if isinstance(raw_bd, list):
-                        related_topics = [str(x).strip() for x in raw_bd if x and str(x).strip()]
-
-        await session.commit()
-
-    initial_state = {
-        "investigation_id": investigation_id,
-        "workspace_id": workspace_id_str,
-        "user_id": user_id_str,
-        "trend_id": trend_id_val or f"trend_{uuid.uuid4().hex[:8]}",
-        "topic": request.topic,
-        "region": request.region,
-        "related_topics": related_topics,
-        "trend_history": [],
-        "research_plan": {},
-        "social_evidence": [],
-        "web_evidence": [],
-        "youtube_evidence": [],
-        "youtube_questions": [],
-        "youtube_videos": [],
-        "llm_evidence": [],
-        "source_statuses": {"social": "pending", "web": "pending", "youtube": "pending", "llm": "pending"},
-        "llm_analysis": {},
-        "normalized_evidence": [],
-        "narratives": [],
-        "questions": [],
-        "audience_segments": [],
-        "content_gaps": [],
-        "opportunities": [],
-        "errors": [],
-        "status": "running",
-        "stage": "Executing research nodes"
-    }
-    
     try:
+        # 1. Update status to running and retrieve trend_breakdown if related_topics is empty
+        related_topics = list(request.related_topics) if request.related_topics else []
+        trend_id_val = request.trend_id
+
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                text("""
+                    UPDATE investigations
+                    SET status = 'running', stage = 'Collecting trend context', updated_at = NOW()
+                    WHERE investigation_id = :iid
+                """),
+                {"iid": investigation_id}
+            )
+            await session.execute(
+                text("UPDATE trends SET status = 'investigating' WHERE LOWER(topic) = LOWER(:t)"),
+                {"t": request.topic}
+            )
+
+            if not related_topics or not trend_id_val:
+                query = text("""
+                    SELECT trend_id, trend_breakdown FROM trends 
+                    WHERE LOWER(topic) = LOWER(:t) 
+                    ORDER BY retrieved_at DESC NULLS LAST LIMIT 1
+                """)
+                result = await session.execute(query, {"t": request.topic})
+                row = result.fetchone()
+                if row:
+                    if not trend_id_val and row[0]:
+                        trend_id_val = str(row[0])
+                    if not related_topics and row[1]:
+                        raw_bd = row[1]
+                        if isinstance(raw_bd, str):
+                            try:
+                                raw_bd = json.loads(raw_bd)
+                            except Exception:
+                                raw_bd = []
+                        if isinstance(raw_bd, list):
+                            related_topics = [str(x).strip() for x in raw_bd if x and str(x).strip()]
+
+            await session.commit()
+
+        initial_state = {
+            "investigation_id": investigation_id,
+            "workspace_id": workspace_id_str,
+            "user_id": user_id_str,
+            "trend_id": trend_id_val or f"trend_{uuid.uuid4().hex[:8]}",
+            "topic": request.topic,
+            "region": request.region,
+            "related_topics": related_topics,
+            "trend_history": [],
+            "research_plan": {},
+            "social_evidence": [],
+            "web_evidence": [],
+            "youtube_evidence": [],
+            "youtube_questions": [],
+            "youtube_videos": [],
+            "llm_evidence": [],
+            "source_statuses": {"social": "pending", "web": "pending", "youtube": "pending", "llm": "pending"},
+            "llm_analysis": {},
+            "normalized_evidence": [],
+            "narratives": [],
+            "questions": [],
+            "audience_segments": [],
+            "content_gaps": [],
+            "opportunities": [],
+            "errors": [],
+            "status": "running",
+            "stage": "Executing research nodes"
+        }
+        
         final_state = await investigation_app.ainvoke(initial_state)
         
         async with AsyncSessionLocal() as session:
@@ -154,18 +154,21 @@ async def run_investigation_task(investigation_id: str, request: InvestigationRe
             
         print(f"Investigation {investigation_id} completed successfully and saved to DB.")
     except Exception as e:
-        print(f"Investigation {investigation_id} failed: {e}")
-        async with AsyncSessionLocal() as session:
-            err_entry = json.dumps([{"source": "pipeline", "message": str(e)}])
-            await session.execute(
-                text("""
-                    UPDATE investigations
-                    SET status = 'failed', stage = 'Failed', errors = :err, updated_at = NOW()
-                    WHERE investigation_id = :iid
-                """),
-                {"iid": investigation_id, "err": err_entry}
-            )
-            await session.commit()
+        logger.exception(f"Investigation {investigation_id} failed: {e}")
+        try:
+            async with AsyncSessionLocal() as session:
+                err_entry = json.dumps([{"source": "pipeline", "message": str(e)}])
+                await session.execute(
+                    text("""
+                        UPDATE investigations
+                        SET status = 'failed', stage = 'Failed', errors = :err, updated_at = NOW()
+                        WHERE investigation_id = :iid
+                    """),
+                    {"iid": investigation_id, "err": err_entry}
+                )
+                await session.commit()
+        except Exception as inner_e:
+            logger.error(f"Failed to record investigation failure state: {inner_e}")
 
 
 @router.post("/", response_model=Dict[str, Any])
