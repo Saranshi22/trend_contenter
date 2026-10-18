@@ -6212,6 +6212,23 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                     </div>
                   </>
                 ) : null}
+ 
+                {!publishingStatus?.instagram?.configured && (!igUserId.trim() || !igAccessToken.trim()) && (
+                  <div style={{ marginBottom: '14px', padding: '10px 14px', borderRadius: '8px', background: '#FEF3C7', border: '1px solid #FCD34D', color: '#92400E', fontSize: '0.82rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                    <span>⚠️ Instagram credentials not detected.</span>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      style={{ padding: '3px 8px', fontSize: '0.75rem', background: '#FFF' }}
+                      onClick={() => {
+                        setPublishChannel('instagram');
+                        setShowCredentialsPanel(true);
+                      }}
+                    >
+                      Configure Credentials
+                    </button>
+                  </div>
+                )}
 
                 {/* Dispatch Button */}
                 <button 
@@ -6558,15 +6575,15 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                   </div>
                 </div>
 
-                {!publishingStatus?.instagram.configured && (!igUserId.trim() || !igAccessToken.trim()) && (
+                {!publishingStatus?.facebook?.configured && (!fbPageId.trim() || !fbAccessToken.trim()) && (
                   <div style={{ marginBottom: '14px', padding: '10px 14px', borderRadius: '8px', background: '#FEF3C7', border: '1px solid #FCD34D', color: '#92400E', fontSize: '0.82rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                    <span>⚠️ Instagram credentials not detected.</span>
+                    <span>⚠️ Facebook credentials not detected.</span>
                     <button
                       type="button"
                       className="btn-outline"
                       style={{ padding: '3px 8px', fontSize: '0.75rem', background: '#FFF' }}
                       onClick={() => {
-                        setPublishChannel('instagram');
+                        setPublishChannel('facebook');
                         setShowCredentialsPanel(true);
                       }}
                     >
@@ -6911,6 +6928,23 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                     placeholder="subscriber1@brand.com, team@agency.com"
                   />
                 </div>
+
+                {!publishingStatus?.email?.configured && (
+                  <div style={{ marginBottom: '14px', padding: '10px 14px', borderRadius: '8px', background: '#FEF3C7', border: '1px solid #FCD34D', color: '#92400E', fontSize: '0.82rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                    <span>⚠️ Email provider (SendGrid) credentials not detected.</span>
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      style={{ padding: '3px 8px', fontSize: '0.75rem', background: '#FFF' }}
+                      onClick={() => {
+                        setPublishChannel('email');
+                        setShowCredentialsPanel(true);
+                      }}
+                    >
+                      Configure Credentials
+                    </button>
+                  </div>
+                )}
 
                 <button 
                   className="btn-primary" 
