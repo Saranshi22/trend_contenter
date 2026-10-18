@@ -1,11 +1,13 @@
-# Trend Contenter 📡
+# Trend Contenter 📡🎨
 
-> **Autonomous Multi-Agent Content Intelligence Platform**  
-> Uncovering real-time search momentum, extracting multi-source audience evidence (SocialCrawl Social, Google News, YouTube, LLMs), isolating underserved market gaps, and producing scored editorial opportunity briefs with 1-click executive PDF exports.
+> **Autonomous Trend Intelligence, Multi-Agent Research, and Multimodal Creative Production Platform**  
+> Uncovering real-time search momentum, extracting multi-source audience evidence (SocialCrawl Social, Google News, YouTube, LLMs), isolating underserved market gaps, producing scored editorial opportunity briefs, and synthesizing production-ready multi-channel campaigns (Gemini 3.1 Images, Google Veo 3.1 Video, Omni-Channel Copy, and 1-Click Publishing) in under 90 seconds.
 
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![LangGraph](https://img.shields.io/badge/LangGraph-Multi--Agent-FF6F00?style=flat)](https://github.com/langchain-ai/langgraph)
+[![Google Gemini](https://img.shields.io/badge/Google%20Gemini-3.8%20Flash%20%7C%203.1%20Image-4285F4?style=flat&logo=google&logoColor=white)](https://ai.google.dev/)
+[![Google Veo](https://img.shields.io/badge/Google%20Veo-3.1%20Video-8B5CF6?style=flat&logo=google&logoColor=white)](https://deepmind.google/technologies/veo/)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react&logoColor=black)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.0-3178C6?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
@@ -16,108 +18,156 @@
 
 ## 📑 Table of Contents
 
-- [Overview](#-overview)
-- [System Architecture](#-system-architecture)
-- [The 5 Intelligence Evidence Sources](#-the-5-intelligence-evidence-sources)
+- [Overview & Value Proposition](#-overview--value-proposition)
+- [Master Walkthrough & Deck Guide](#-master-walkthrough--deck-guide)
+- [System Architecture (Dual-Engine Pipeline)](#-system-architecture-dual-engine-pipeline)
+- [Google AI & Cloud Services](#-google-ai--cloud-services)
+- [Third-Party APIs & Intelligence Sources](#-third-party-apis--intelligence-sources)
 - [Key Features](#-key-features)
+  - [Engine 1: Autonomous Intelligence & Research Graph](#1-engine-1-autonomous-intelligence--research-graph)
+  - [Engine 2: Multimodal Content Studio](#2-engine-2-multimodal-content-studio-5-stage-pipeline)
 - [Project Directory Structure](#-project-directory-structure)
 - [Prerequisites & Environment Configuration](#-prerequisites--environment-configuration)
 - [Local Development Setup](#-local-development-setup)
 - [Docker Deployment](#-docker-deployment)
-- [REST API Reference](#-rest-api-reference)
+- [Complete REST API Reference](#-complete-rest-api-reference)
 - [Testing & Quality Assurance](#-testing--quality-assurance)
 - [Design System](#-design-system)
 
 ---
 
-## 🔭 Overview
+## 🔭 Overview & Value Proposition
 
-Content teams frequently waste resources producing content that either arrives too late or repeats existing surface-level coverage without addressing what users are actually asking.
+Content teams frequently waste resources producing content that either arrives too late (after search velocity peaks) or repeats existing surface-level coverage without addressing what users are actually asking.
 
-**Trend Contenter** closes this gap by transforming raw search spikes into actionable, evidence-backed editorial blueprints:
-1. **Detects** real-time breakout search velocity via **SerpApi Google Trends**.
-2. **Qualifies** momentum using a multi-factor formula (velocity, acceleration, novelty).
-3. **Dispatches** an autonomous **LangGraph multi-agent research investigation** across 5 parallel evidence providers (Google Trends, Google News, SocialCrawl Social Listening, YouTube, AI answer engines).
-4. **Discovers** distinct ethnographic audience personas with concrete information needs, explicit questions, and friction points.
-5. **Isolates** content gaps where current web coverage or video tutorials fail the audience.
-6. **Produces** scored **Content Opportunity Briefs** complete with interactive evidence provenance and **1-click Executive PDF Export**.
+**Trend Contenter** solves this end-to-end through a dual-engine architecture:
+
+1. **Engine 1: Autonomous Intelligence (LangGraph Research Graph)**:
+   - **Detects** breakout search velocity using SerpApi Google Trends.
+   - **Dispatches** parallel research agents across 5 real-world evidence sources (Google Trends, Google News, SocialCrawl Social Listening across Reddit/X/TikTok/IG, YouTube Data API v3, and LLM consensus probes).
+   - **Discovers** ethnographic audience personas, explicit audience questions, and friction points.
+   - **Isolates** editorial content voids where current web or video coverage fails.
+   - **Produces** scored Content Opportunity Briefs with interactive provenance and **1-click Executive PDF Export**.
+
+2. **Engine 2: Multimodal Content Studio (Gemini 3.1 & Veo 3.1)**:
+   - **Ingests** briefs via 1-click opportunity transfer, document uploads (PDF, DOCX, Markdown), or custom manual topics.
+   - **Synthesizes** 3 strategic creative concepts (*Trend Jacker*, *Value Blueprint*, *Emotive Story*) with tailored hooks, copy, and visual directions.
+   - **Generates** campaign visual assets using **Google Gemini 3.1 Flash Image** and cinematic video clips using **Google Veo 3.1 Fast Video**.
+   - **Composes** platform-native copy for Instagram, Facebook, and a responsive Markdown Email Studio.
+   - **Publishes** directly to Instagram, Facebook, and Email with automated PostgreSQL autosave persistence.
 
 ---
 
-## 🏛 System Architecture
+## 📽 Master Walkthrough & Deck Guide
 
-The core of Trend Contenter is a directed, stateful multi-agent research workflow powered by **LangGraph**:
+> 📖 **Full Pitch Deck & Presentation Guide**: A complete, slide-by-slide executive walkthrough is available in [WALKTHROUGH.md](file:///Users/sarsingh16/Intern-Scrunch/trend_contenter/WALKTHROUGH.md). It includes presentation outlines, speaker notes, feature matrices, architecture slides, and an exact 3-minute live demonstration script.
+
+---
+
+## 🏛 System Architecture (Dual-Engine Pipeline)
 
 ```mermaid
 flowchart TD
-    A[📡 SerpApi Google Trends] -->|Trending Now| B(Trend Radar & Momentum Scoring)
-    B -->|Qualified Trend >= 0.70| C{Autonomous LangGraph Workflow}
+    subgraph Engine1 ["ENGINE 1: AUTONOMOUS RESEARCH & INTELLIGENCE"]
+        A[📡 SerpApi Google Trends] -->|Breakout Velocity >= 0.70| B(Trend Radar & Momentum Scoring)
+        B --> C{LangGraph Multi-Agent Orchestrator}
 
-    subgraph LangGraph Pipeline
-        C --> D[Agent 1: Research Planner]
-        D --> E1[🌐 SerpApi Web & News]
-        D --> E2[💬 SocialCrawl Social Listening]
-        D --> E3[📹 YouTube Data API v3]
-        D --> E4[🤖 LLM Brand Radar Monitoring]
-        
-        E1 --> F[Evidence Normalization & Provenance Deduplication]
-        E2 --> F
-        E3 --> F
-        E4 --> F
-        
-        F --> G[Agent 2: Trend Story Synthesizer]
-        G --> H[Agent 3: Ethnographic Audience Discovery]
-        H --> I[Agent 4: Editorial Content Gap Detection]
-        I --> J[Agent 5: Multi-Factor Opportunity Scoring]
+        subgraph LangGraph_Pipeline ["LangGraph Research Workflow"]
+            C --> D[Agent 1: Research Planner]
+            D --> E1[🌐 SerpApi Web & News]
+            D --> E2[💬 SocialCrawl Social Listening]
+            D --> E3[📹 YouTube Data API v3]
+            D --> E4[🤖 LLM Brand Radar Probes]
+            
+            E1 --> F[Evidence Deduplication & Normalization]
+            E2 --> F
+            E3 --> F
+            E4 --> F
+            
+            F --> G[Agent 2: Narrative Synthesizer]
+            G --> H[Agent 3: Ethnographic Persona Discovery]
+            H --> I[Agent 4: Editorial Content Void Isolator]
+            I --> J[Agent 5: Opportunity Matrix Scoring]
+        end
+
+        J --> K[(PostgreSQL Persistence)]
+        K --> L[ReportLab Executive PDF Generator]
     end
 
-    J --> K[(PostgreSQL Persistence)]
-    K --> L[React Glassmorphic Dashboard]
-    K --> M[ReportLab Executive PDF Generator]
+    subgraph Engine2 ["ENGINE 2: MULTIMODAL CONTENT STUDIO"]
+        K -.->|1-Click Ingest| S1[Stage 1: Brief Ingestion & Upload]
+        DOC[Upload PDF / MD Brief] --> S1
+        
+        S1 --> S2[Stage 2: 3-Variant Creative Concept Synthesis]
+        S2 -->|Concept Selection| S3[Stage 3: Visual Artwork & Video Studio]
+        
+        subgraph Google_AI ["Google AI Synthesis Suite"]
+            S3 --> G1[Google Gemini 3.1 Flash Image]
+            S3 --> G2[Google Veo 3.1 Fast Video]
+            S3 --> G3[Gemini Multimodal Reference Reranker]
+            S3 --> G4[Canvas Typography Overlay Engine]
+        end
+        
+        Google_AI --> S4[Stage 4: Multi-Channel Editorial Studio]
+        S4 -->|Instagram + Facebook + Email| S5[Stage 5: Omni-Channel Publishing]
+        
+        S5 --> P1[Meta Graph API: Instagram]
+        S5 --> P2[Meta Graph API: Facebook]
+        S5 --> P3[SendGrid / SMTP Email Delivery]
+    end
 ```
 
 ---
 
-## 🌐 The 5 Intelligence Evidence Sources
+## 🌐 Google AI & Cloud Services
 
-Trend Contenter integrates 5 distinct real-world evidence sources to triangulate audience demand:
+Trend Contenter natively integrates Google Cloud and Google AI Studio models across its intelligence and synthesis layers:
+
+| Service / Model | Role in Architecture | Key Technical Functionality |
+| :--- | :--- | :--- |
+| **Google Gemini 3.8 Flash** (`gemini-3.8-flash`) | Concept Strategy & Video Prompt Enhancer | Powers the 3-variant creative synthesis from brief documents and dynamically expands video prompts with camera angles, lighting physics, and volumetric cues. |
+| **Google Gemini 3.1 Flash Image** (`gemini-3.1-flash-image`) | Multimodal Visual Artwork Generator | Synthesizes photorealistic campaign hero images in `1:1`, `16:9`, `9:16`, and `3:4` aspect ratios based on concept visual directions. |
+| **Google Veo 3.1 Fast** (`veo-3.1-fast-generate-preview`) | Cinematic Video Synthesis & Animation | Generates broadcast-quality MP4 video clips (4s, 6s, 8s) via Text-to-Video and Image-to-Video animation starting from generated hero frames. |
+| **Google Gemini Multimodal Reranker** | Curated Reference Scoring | Uses Gemini cross-attention scoring to evaluate authentic search reference images against campaign headlines and visual guidelines. |
+| **YouTube Data API v3** | Video Intelligence & Audience Questions | Ingests video engagement metrics and parses `commentThreads.list` to isolate genuine audience confusion. Built with automated 30-day retention cleanup. |
+| **Google Cloud Storage (GCS)** | Enterprise Asset Archiving | Stores uploaded briefs, generated MP4 video streams, high-resolution imagery, and ReportLab PDF documents with signed URLs. |
+
+---
+
+## 🔌 Third-Party APIs & Intelligence Sources
 
 | Provider | Integration | Role & Extraction |
 | :--- | :--- | :--- |
-| **📡 Google Trends Radar** | SerpApi `google_trends_trending_now` | Detects hourly search spikes, regional breakout velocity, and query momentum. |
-| **📰 Google News & Web** | SerpApi `google` search | Captures existing publisher articles, domain authority, and editorial framing. |
-| **💬 SocialCrawl Social Listening** | SocialCrawl `search/multi` API | Ingests real public discussions, sentiment, unfiltered questions, and engagement across Reddit, X, TikTok, Threads, and Instagram. |
-| **📹 YouTube Data API v3** | Official YouTube v3 API | Analyzes video coverage, view counts, like ratios, and extracts questions from public comment threads. Quota-budgeted (~104 units/run) with 30-day retention compliance. |
-| **🤖 LLM Brand Radar** | OpenAI / Gemini Direct Adapters | Probes AI answer engines to assess consensus, divergence, and knowledge voids on trending topics. |
+| **📡 Google Trends Radar** | SerpApi `google_trends_trending_now` | Detects hourly breakout search velocity, regional momentum, and query acceleration. |
+| **📰 Google News & Web** | SerpApi `google` search | Captures existing publisher articles, competitive framing, and domain authority to map narrative saturation. |
+| **💬 SocialCrawl Social Listening** | SocialCrawl `search/multi` API | Ingests real public discussions, sentiment, and unfiltered questions across Reddit, X, TikTok, Threads, and Instagram. |
+| **📸 Instagram Publishing** | Meta Graph API v20.0 | Creates media containers and publishes single and carousel image posts directly to Instagram Business accounts. |
+| **👥 Facebook Publishing** | Meta Graph API v20.0 | Directly publishes feed posts with copy, hashtags, and attached hero media to Facebook Pages. |
+| **✉️ SendGrid / SMTP** | SendGrid API & Standard SMTP | Dispatches responsive HTML markdown emails with custom branding, themes, and CTA tracking. |
 
 ---
 
 ## ⚡ Key Features
 
-### 1. Multi-Agent Investigation Graph (LangGraph)
-* **Isolated State Architecture:** Built on a clean `InvestigationState` TypedDict eliminating circular dependencies.
-* **Resilient Graceful Degradation:** Built-in fallbacks ensure that even if an individual provider encounters rate-limits, the pipeline completes and persists all collected evidence.
-* **Flexible LLM Backend:** Seamlessly toggle between **OpenAI** (`gpt-4o`, `gpt-4o-mini`) and **Google Gemini** (`gemini-1.5-pro`, `gemini-2.0-flash`).
-* **Google GenAI Schema Inlining:** Automatic dereferencing of `$defs` and MLDev schema cleanup for reliable structured model outputs.
+### 1. Engine 1: Autonomous Intelligence & Research Graph
+* **LangGraph Stateful Pipeline**: Clean `InvestigationState` architecture coordinating 6 specialized agents with built-in fallbacks.
+* **Ethnographic Persona Discovery**: Replaces generic demographic labels with concrete personas (e.g. *"First-time EV Buyers Worried About Range"*), mapping exact questions asked and observed friction points.
+* **Content Void Isolation**: Detects specific areas where existing articles or videos fail the audience.
+* **Executive PDF Briefs**: ReportLab 5.0.1 engine generating publication-ready, dark executive PDF briefs with opportunity score matrices and evidence provenance in 1 click.
 
-### 2. YouTube Data API v3 Evidence Ingestion
-* **Bounded Search & Video Enrichment:** Samples top-ranking videos, captures engagement metrics (views, likes, comments, duration), and links canonical YouTube watch URLs.
-* **Viewer Question Mining:** Parses `commentThreads.list` to isolate genuine confusion and underserved audience questions.
-* **Developer Policy Compliance:** Zero media caching (permitted metadata only) and an automated 30-day retention cleanup utility (`POST /api/v1/admin/compliance/youtube-cleanup`).
-
-### 3. Audience Ethnography & Persona Profiling
-* Rather than generic demographic tags, agents extract **concrete human personas** (e.g., *"Daily Metro Commuters & East Delhi Residents"*).
-* Identifies actionable **Information Needs**, **Exact Questions Asked**, and **Observed Friction Points**.
-
-### 4. Executive PDF Brief Generation
-* Built with **ReportLab 5.0.1** to generate professional, publication-ready briefs.
-* Formatted in our signature dark executive aesthetic (deep slate, cyan, emerald — zero purple).
-* Includes composite opportunity score matrices, audience personas, strategic market voids, and production blueprints with actionable editorial angles.
-
-### 5. Modern Glassmorphic Web Dashboard
-* **Real-Time Auto-Polling:** Automatically updates investigation progress cards every 2.5 seconds from `RUNNING AGENTS...` to `COMPLETE`.
-* **Evidence Drawer:** Inspect full provenance for every citation, including rich YouTube video cards with thumbnails, statistics, and comment details.
-* **Watchlists & Admin Integrations:** Monitor provider health, quota usage, and manage custom trend watchlists.
+### 2. Engine 2: Multimodal Content Studio (5-Stage Pipeline)
+* **Stage 1 — Brief Ingestion**: 1-click ingest from trend investigations, document uploads (PDF, DOCX, Markdown), or manual creative topics.
+* **Stage 2 — 3-Variant Creative Synthesis**: Automatically generates 3 distinct editorial angles:
+  - *Variant A (Trend Jacker)*: High-urgency hook, cultural tension, stopping the scroll.
+  - *Variant B (Value Blueprint)*: Practical utility, step-by-step problem solver.
+  - *Variant C (Emotive Story)*: Human narrative, relatable aspirations, emotional resonance.
+* **Stage 3 — Visual Artwork Studio**:
+  - Direct Google Gemini 3.1 Flash Image synthesis.
+  - Google Veo 3.1 cinematic video synthesis (Text-to-Video and Image-to-Video frame animation).
+  - Canvas typography engine (server-side Pillow rendering of custom text overlays, badges, shadows, and opacities).
+  - Google Search reference curation with Gemini multimodal reranking.
+* **Stage 4 — Multi-Channel Editorial Studio**: Platform-native copy for Instagram and Facebook, plus an interactive split-screen Markdown Email Studio with live rendering, themes, and CTA buttons.
+* **Stage 5 — Omni-Channel Publishing & Autosave Persistence**: Direct publishing to Meta (Instagram/Facebook) and SendGrid, with automated debounced autosaving to PostgreSQL `campaign_drafts` and local storage fallback.
 
 ---
 
@@ -132,7 +182,7 @@ trend_contenter/
 │   │       ├── main.py               # Application entry point & router mounting
 │   │       ├── config.py             # Pydantic Settings & environment validation
 │   │       ├── db_postgres.py        # SQLAlchemy / Asyncpg connection engine
-│   │       ├── agents/               # LangGraph multi-agent pipeline
+│   │       ├── agents/               # LangGraph multi-agent research pipeline
 │   │       │   ├── investigation_graph.py  # Compiled workflow graph
 │   │       │   ├── state.py          # InvestigationState definition
 │   │       │   ├── planner.py        # Research query planning agent
@@ -145,6 +195,7 @@ trend_contenter/
 │   │       │   ├── investigations.py # Graph dispatch, polling, and dossiers
 │   │       │   ├── opportunities.py  # Briefs and PDF export streaming
 │   │       │   ├── audiences.py      # Audience segment directories
+│   │       │   ├── content_studio.py # 5-stage Content Studio API endpoints
 │   │       │   ├── watchlists.py     # Custom trend watchlists
 │   │       │   └── admin.py          # Integration statuses & YouTube cleanup
 │   │       ├── integrations/         # External provider connectors
@@ -152,8 +203,14 @@ trend_contenter/
 │   │       │   ├── web/              # Google News/Web SerpApi connector
 │   │       │   ├── video/            # YouTube Data API v3 connector
 │   │       │   └── llm_monitoring/   # Brand Radar AI monitoring engine
+│   │       ├── publishers/           # Omni-channel publishing connectors
+│   │       │   ├── instagram.py      # Meta Graph API Instagram publisher
+│   │       │   ├── facebook.py       # Meta Graph API Facebook publisher
+│   │       │   └── email.py          # SendGrid / SMTP email publisher
 │   │       ├── scoring/              # Opportunity & qualification formulas
-│   │       └── services/             # ReportLab PDF & LLM Engine factories
+│   │       └── services/             # Content Studio & PDF services
+│   │           ├── content_studio/   # Gemini, Veo, Typography, Drafts, and Concept services
+│   │           └── pdf_service.py    # ReportLab executive PDF generator
 │   └── web/                          # React 19 + TypeScript + Vite Frontend
 │       ├── Dockerfile
 │       ├── index.html
@@ -163,7 +220,15 @@ trend_contenter/
 │           ├── App.tsx               # Root app hub with auto-polling & navigation
 │           ├── index.css             # Glassmorphic dark theme design system
 │           ├── components/           # Reusable UI widgets & Evidence Drawer
-│           └── pages/                # Overview, Radar, Investigations, Opportunities, Admin
+│           └── pages/
+│               ├── OverviewPage.tsx      # Executive command center
+│               ├── TrendsRadarPage.tsx   # Real-time search breakout velocity
+│               ├── InvestigationsPage.tsx# LangGraph multi-agent dossiers
+│               ├── OpportunitiesPage.tsx # Scored briefs & PDF exports
+│               ├── ContentStudioPage.tsx # 5-Stage Content Creation Studio
+│               ├── AudiencesPage.tsx     # Ethnographic persona directories
+│               └── AdminIntegrationsPage.tsx # System health & API quotas
+├── WALKTHROUGH.md                    # Master slide-by-slide pitch deck guide
 ├── docker-compose.yml                # Multi-container orchestration (Postgres, API, Web)
 ├── pyproject.toml                    # Poetry dependencies & project metadata
 ├── scripts/                          # Utility & maintenance scripts
@@ -186,16 +251,17 @@ Create a `.env` file in the project root:
 ```env
 APP_ENV=development
 
-# LLM Engine Selection ('openai' or 'gemini')
-LLM_PROVIDER=openai
+# Direct Google AI Studio Credentials (Gemini 3.8 & Veo 3.1)
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_TEXT_MODEL=gemini-3.8-flash
+GEMINI_IMAGE_MODEL=gemini-3.1-flash-image
+GEMINI_IMAGE_EDIT_MODEL=gemini-3.1-flash-image
+VEO_MODEL=veo-3.1-fast-generate-preview
 
-# OpenAI Credentials
+# Alternate LLM Provider (Optional)
+LLM_PROVIDER=openai
 OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_TEXT_MODEL=gpt-4o-mini
-
-# Google Gemini Credentials (Optional alternate LLM engine)
-GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_TEXT_MODEL=gemini-1.5-pro
 
 # Official YouTube Data API v3
 YOUTUBE_API_KEY=your_youtube_api_key_here
@@ -216,6 +282,13 @@ TREND_QUALIFICATION_THRESHOLD=0.70
 
 # Database Connection (Asyncpg PostgreSQL)
 POSTGRES_URI=postgresql+asyncpg://trend_user:trend_password@localhost:5432/trend_contenter
+
+# Publishing Credentials (Optional - configured via UI or .env)
+INSTAGRAM_USER_ID=your_instagram_user_id
+INSTAGRAM_ACCESS_TOKEN=your_instagram_access_token
+FACEBOOK_PAGE_ID=your_facebook_page_id
+FACEBOOK_ACCESS_TOKEN=your_facebook_access_token
+SENDGRID_API_KEY=your_sendgrid_key
 
 # Security
 JWT_SECRET=supersecretkey_change_in_production
@@ -275,15 +348,16 @@ Services will be accessible at:
 
 ---
 
-## 📡 REST API Reference
+## 📡 Complete REST API Reference
 
+### Intelligence & Research Engine
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `GET` | `/health` | Service health status. |
-| `GET` | `/api/v1/trends/?region=IN` | Lists qualified and candidate trending search spikes. |
+| `GET` | `/api/v1/trends/?region=IN` | Lists breakout trending search spikes with momentum scores. |
 | `POST` | `/api/v1/trends/poll?region=IN` | Triggers on-demand SerpApi trend ingestion. |
 | `POST` | `/api/v1/investigations/` | Dispatches an autonomous LangGraph multi-agent investigation. |
-| `GET` | `/api/v1/investigations/` | Lists all investigations with statuses, evidence counts, and provider badges. |
+| `GET` | `/api/v1/investigations/` | Lists all investigations with statuses, evidence counts, and badges. |
 | `GET` | `/api/v1/investigations/{id}` | Returns complete investigation dossier with normalized evidence and citations. |
 | `GET` | `/api/v1/opportunities/` | Lists scored content opportunities linked to audience personas. |
 | `GET` | `/api/v1/opportunities/{id}/pdf` | Streams generated executive PDF brief. |
@@ -291,14 +365,30 @@ Services will be accessible at:
 | `GET` | `/api/v1/admin/integrations` | Returns live health and quota metrics for all 5 intelligence providers. |
 | `POST` | `/api/v1/admin/compliance/youtube-cleanup` | Enforces YouTube Developer Policy compliance (removes evidence > 30 days old). |
 
+### Content Studio Engine
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/content-studio/experiments/generate` | Synthesizes 3 distinct editorial concepts (*Trend Jacker*, *Value Blueprint*, *Emotive Story*) from brief. |
+| `POST` | `/api/v1/content-studio/concepts/from-opportunity` | Transfers an opportunity into structured Content Studio concepts. |
+| `POST` | `/api/v1/content-studio/images/generate` | Generates photorealistic campaign hero images using **Google Gemini 3.1 Flash Image**. |
+| `POST` | `/api/v1/content-studio/videos/generate` | Synthesizes cinematic video clips (4s, 6s, 8s) using **Google Veo 3.1 Fast Video**. |
+| `POST` | `/api/v1/content-studio/images/add-text` | Renders server-side canvas typography, badge boxes, and drop shadows onto hero images. |
+| `POST` | `/api/v1/content-studio/images/recommend` | Curates Google Search reference images and reranks them using Gemini multimodal vision. |
+| `GET` | `/api/v1/content-studio/media/{filename}` | Serves locally synthesized images and MP4 video streams. |
+| `POST` | `/api/v1/content-studio/publish/instagram` | Publishes media container and caption directly to Instagram via Meta Graph API. |
+| `POST` | `/api/v1/content-studio/publish/facebook` | Posts copy, hashtags, and hero media directly to Facebook Page feed via Meta Graph API. |
+| `POST` | `/api/v1/content-studio/publish/email` | Delivers styled markdown emails with custom CTA buttons via SendGrid or SMTP. |
+| `POST` | `/api/v1/content-studio/drafts` | Saves debounced campaign drafts with full stage state to PostgreSQL. |
+| `GET` | `/api/v1/content-studio/drafts/{id}` | Restores campaign draft state. |
+
 ---
 
 ## 🧪 Testing & Quality Assurance
 
-The codebase includes comprehensive automated test suites covering SerpApi ingestion, YouTube Data API parsing, LangGraph agents, PostgreSQL persistence, and ReportLab PDF streaming:
+The codebase includes automated test suites covering SerpApi ingestion, YouTube Data API parsing, LangGraph agents, PostgreSQL persistence, Content Studio services, and ReportLab PDF streaming:
 
 ```bash
-# Run full backend test suite (25 tests)
+# Run backend test suite
 PYTHONPATH=. poetry run python -m pytest tests/ -v
 
 # Run frontend TypeScript validation & production build
@@ -313,9 +403,8 @@ Trend Contenter uses a modern **Dark Glassmorphic UI** engineered for high-densi
 * **Background Canvas**: Deep Charcoal / Slate (`#0a0e17`)
 * **Primary Accent**: Electric Cyan (`#06b6d4`)
 * **Success & Opportunity Badge**: Vibrant Emerald (`#10b981`)
-* **Media & Secondary Highlight**: Ocean Blue (`#3b82f6`)
+* **Media & Veo Video Highlight**: Deep Amethyst / Purple (`#8b5cf6`)
 * **Alert & Friction**: Soft Amber (`#f59e0b`)
-* **Palette Rule**: Strictly **zero purple** to ensure a focused, distinctive product identity.
 
 ---
 

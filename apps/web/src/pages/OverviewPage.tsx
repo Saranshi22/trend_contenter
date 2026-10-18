@@ -317,7 +317,6 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {trends.slice(0, 4).map((item) => {
-              const qualScore = Math.round(item.internal_metrics.qualification_score * 100);
               const isInvestigated = item.internal_metrics.status === 'investigated';
               const matchingInv = investigations.find(
                 inv => (item.trend_id && inv.investigation_id === item.trend_id) || inv.topic.toLowerCase() === item.topic.toLowerCase()
@@ -328,87 +327,96 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
                   key={item.trend_id}
                   style={{
                     display: 'flex',
-                    justifyContent: 'space-between',
                     alignItems: 'center',
-                    padding: '12px 14px',
+                    justifyContent: 'space-between',
+                    padding: '12px 16px',
                     background: '#FFFFFF',
                     borderRadius: '8px',
                     border: '1px solid var(--border-subtle)',
-                    boxShadow: 'var(--shadow-sm)'
+                    boxShadow: 'var(--shadow-sm)',
+                    gap: '14px',
+                    minWidth: 0
                   }}
                 >
-                  <div>
-                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', textTransform: 'capitalize', fontSize: '0.92rem' }}>
+                  {/* Left: Topic Title & Meta badges */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        color: 'var(--text-primary)',
+                        textTransform: 'capitalize',
+                        fontSize: '0.92rem',
+                        lineHeight: 1.3,
+                        marginBottom: '4px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}
+                      title={item.topic}
+                    >
                       {item.topic}
                     </div>
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '3px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                      <span className="badge badge-cyan" style={{ fontSize: '0.68rem', padding: '1px 6px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', flexWrap: 'wrap' }}>
+                      <span className="badge badge-cyan" style={{ fontSize: '0.68rem', padding: '1px 6px', letterSpacing: '0.02em' }}>
                         {item.category || 'Trending Topic'}
                       </span>
                       {item.provider_metrics.increase_percentage && (
-                        <span style={{ color: 'var(--status-success)', fontWeight: 600 }}>
+                        <span style={{ color: 'var(--status-success)', fontWeight: 600, fontSize: '0.75rem' }}>
                           +{Math.round(item.provider_metrics.increase_percentage)}% Spike
+                        </span>
+                      )}
+                      {isInvestigated && (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.72rem', color: 'var(--status-success)', fontWeight: 500 }}>
+                          <IconCheck size={11} color="var(--status-success)" />
+                          <span>Investigated</span>
                         </span>
                       )}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontWeight: 700, fontSize: '0.9rem', color: qualScore >= 70 ? 'var(--status-success)' : 'var(--text-primary)' }}>
-                        {qualScore}%
-                      </div>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>Qual Score</div>
-                    </div>
+
+                  {/* Right: Clean Single CTA */}
+                  <div style={{ flexShrink: 0, display: 'flex', justifyContent: 'flex-end' }}>
                     {isInvestigated ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span
-                          className="badge badge-emerald"
-                          style={{
-                            fontSize: '0.74rem',
-                            padding: '4px 8px',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            textTransform: 'none',
-                            letterSpacing: 'normal',
-                            fontWeight: 500
-                          }}
-                        >
-                          <IconCheck size={12} color="var(--status-success)" />
-                          <span>Completed</span>
-                        </span>
-                        <button
-                          type="button"
-                          className="btn-outline"
-                          style={{
-                            padding: '4px 10px',
-                            fontSize: '0.76rem',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            borderRadius: '6px'
-                          }}
-                          onClick={() => {
-                            if (onViewInvestigation) {
-                              onViewInvestigation(matchingInv?.investigation_id);
-                            } else {
-                              onNavigateToInvestigations();
-                            }
-                          }}
-                          title={`View investigation report for ${item.topic}`}
-                        >
-                          <span>View investigation</span>
-                          <IconArrowRight size={11} />
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        className="btn-outline"
+                        style={{
+                          padding: '6px 12px',
+                          fontSize: '0.76rem',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          borderRadius: '6px',
+                          whiteSpace: 'nowrap',
+                          color: 'var(--action-primary)',
+                          borderColor: 'rgba(2, 132, 199, 0.35)',
+                          background: 'rgba(2, 132, 199, 0.04)'
+                        }}
+                        onClick={() => {
+                          if (onViewInvestigation) {
+                            onViewInvestigation(matchingInv?.investigation_id);
+                          } else {
+                            onNavigateToInvestigations();
+                          }
+                        }}
+                        title={`View investigation report for ${item.topic}`}
+                      >
+                        <span>View Dossier</span>
+                        <IconArrowRight size={11} />
+                      </button>
                     ) : (
                       <button
                         type="button"
                         className="btn-primary"
-                        style={{ padding: '6px 14px', fontSize: '0.78rem' }}
+                        style={{
+                          padding: '6px 14px',
+                          fontSize: '0.78rem',
+                          borderRadius: '6px',
+                          whiteSpace: 'nowrap'
+                        }}
                         onClick={() => onLaunchInvestigation(item.topic, item.trend_id)}
                       >
-                        Investigate
+                        <span>Investigate</span>
                       </button>
                     )}
                   </div>
@@ -443,18 +451,31 @@ export const OverviewPage: React.FC<OverviewPageProps> = ({
                   background: '#FFFFFF',
                   borderRadius: '8px',
                   border: '1px solid var(--border-subtle)',
-                  boxShadow: 'var(--shadow-sm)'
+                  boxShadow: 'var(--shadow-sm)',
+                  minWidth: 0,
+                  overflow: 'hidden'
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
-                  <span className="badge badge-cyan" style={{ fontSize: '0.68rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '6px', minWidth: 0 }}>
+                  <span 
+                    className="badge badge-cyan" 
+                    style={{ 
+                      fontSize: '0.68rem',
+                      maxWidth: 'calc(100% - 90px)',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      display: 'inline-block'
+                    }}
+                    title={opp.audience_label || 'Target Audience'}
+                  >
                     {opp.audience_label || 'Target Audience'}
                   </span>
-                  <span style={{ fontWeight: 700, color: 'var(--brand-teal)', fontSize: '0.85rem' }}>
+                  <span style={{ fontWeight: 700, color: 'var(--brand-teal)', fontSize: '0.82rem', whiteSpace: 'nowrap', flexShrink: 0 }}>
                     Score: {Math.round(opp.score * 100)}/100
                   </span>
                 </div>
-                <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.92rem', marginBottom: '8px' }}>
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.92rem', marginBottom: '8px', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
                   {opp.title}
                 </div>
                 <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>

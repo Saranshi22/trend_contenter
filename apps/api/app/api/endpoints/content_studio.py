@@ -1,7 +1,7 @@
 import base64
 import logging
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
@@ -36,6 +36,10 @@ from ...domain.models.content_studio import (
     PublishEmailRequest,
     PublishingStatusResponse,
     PublishResult,
+    CampaignDraft,
+    SaveCampaignDraftRequest,
+    CampaignDraftSummary,
+    ListCampaignDraftsResponse,
 )
 from ...domain.models.user import User
 from ...security.auth import require_permission
@@ -48,6 +52,7 @@ from ...services.content_studio.typography_service import TypographyService
 from ...services.content_studio.veo_service import veo_service
 from ...services.content_studio.experiment_service import experiment_service
 from ...services.content_studio.publisher_service import publisher_service
+from ...services.content_studio.draft_service import draft_service
 from ...services.pdf_service import PDFService
 from .opportunities import _parse_dict, _parse_json_list
 
@@ -92,7 +97,7 @@ async def content_studio_health(current_user: User = Depends(require_read)):
     }
 
 
-@router.get("/media/{filename}", response_class=FileResponse)
+@router.api_route("/media/{filename}", methods=["GET", "HEAD"], response_class=FileResponse)
 async def get_media(filename: str):
     """
     Serves generated images/videos. Public by design so <img>/<video> tags can load them
@@ -140,6 +145,8 @@ async def _load_opportunity_brief(db: AsyncSession, opportunity_id: str) -> Dict
                    a.description as audience_description, a.needs as audience_needs,
                    a.questions as audience_questions, a.concerns as audience_concerns,
                    o.title, o.score, o.problem, o.audience_need, o.content_gap,
+                   o.strategic_rationale, o.key_talking_points, o.target_audience_pain_points,
+                   o.recommended_outline, o.hook_options,
                    o.recommended_angle, o.recommended_format, o.score_breakdown
             FROM opportunities o
             LEFT JOIN audiences a ON o.segment_id = a.segment_id
@@ -158,6 +165,11 @@ async def _load_opportunity_brief(db: AsyncSession, opportunity_id: str) -> Dict
         "problem": row.get("problem") or "Underserved audience need",
         "audience_need": row.get("audience_need") or "High interest, missing high-quality guidance",
         "content_gap": row.get("content_gap") or "Absence of clear, comprehensive synthesis",
+        "strategic_rationale": row.get("strategic_rationale") or "",
+        "key_talking_points": _parse_json_list(row.get("key_talking_points")),
+        "target_audience_pain_points": _parse_json_list(row.get("target_audience_pain_points")),
+        "recommended_outline": _parse_json_list(row.get("recommended_outline")),
+        "hook_options": _parse_json_list(row.get("hook_options")),
         "recommended_angle": row.get("recommended_angle") or "Practical, actionable guide with data",
         "recommended_format": row.get("recommended_format") or "Explainer Article / Video Script",
         "score_breakdown": _parse_dict(row.get("score_breakdown")),
@@ -263,6 +275,9 @@ async def recommend_images(req: RecommendImagesRequest, current_user: User = Dep
             serpapi_key=req.serpapi_key,
             google_cse_key=req.google_cse_key,
             google_cse_id=req.google_cse_id,
+            headline=req.headline,
+            topic=req.topic,
+            visual_direction=req.visual_direction,
         )
 
         ranked_items = await reranker_service.rerank(
@@ -271,10 +286,13 @@ async def recommend_images(req: RecommendImagesRequest, current_user: User = Dep
             model_type=req.reranker_model or "hybrid",
             gemini_api_key=req.gemini_api_key,
             base_url=req.base_url,
+            visual_direction=req.visual_direction,
+            headline=req.headline,
         )
 
         return RecommendImagesResponse(
             prompt=req.prompt,
+            optimized_query=getattr(search_service, "last_optimized_query", req.prompt),
             total_candidates=len(candidates),
             reranker_model=req.reranker_model or "gemini",
             recommendations=ranked_items[:req.num_results],
@@ -301,12 +319,17 @@ async def generate_video(req: GenerateVideoRequest, current_user: User = Depends
 # ---------------------------------------------------------------------------
 
 @router.post("/experiments/generate", response_model=GenerateExperimentsResponse, responses=HTTP_500_RESPONSE)
-async def generate_experiments(req: GenerateExperimentsRequest, current_user: User = Depends(require_write)):
+async def generate_experiments(
+    req: GenerateExperimentsRequest,
+    db: AsyncSession = Depends(get_postgres_session),
+    current_user: User = Depends(require_write),
+):
     """Generates 3 multi-channel campaign experiment variants (Trend Jacker, Value, Narrative) from a brief."""
     try:
-        return await experiment_service.generate_experiments(req)
+        return await experiment_service.generate_experiments(req, session=db)
     except Exception as e:
         raise _fail("/experiments/generate", e)
+
 
 
 # ---------------------------------------------------------------------------
@@ -347,5 +370,90 @@ async def publish_email(req: PublishEmailRequest, current_user: User = Depends(r
         return await run_in_threadpool(publisher_service.publish_email, req)
     except Exception as e:
         raise _fail("/publish/email", e)
+
+
+# ---------------------------------------------------------------------------
+# Persistent Campaign Drafts
+# ---------------------------------------------------------------------------
+
+@router.post("/drafts", response_model=CampaignDraft, responses=HTTP_500_RESPONSE)
+async def save_campaign_draft(
+    req: SaveCampaignDraftRequest,
+    db: AsyncSession = Depends(get_postgres_session),
+    current_user: User = Depends(require_write)
+):
+    """Saves or updates a campaign draft in PostgreSQL with debounced state."""
+    try:
+        user_id = str(getattr(current_user, "user_id", getattr(current_user, "id", "dev_user")))
+        workspace_id = str(getattr(current_user, "workspace_id", "workspace_dev"))
+        return await draft_service.save_draft(req, workspace_id, user_id, db)
+    except Exception as e:
+        raise _fail("/drafts", e)
+
+
+@router.get("/drafts/latest", response_model=Optional[CampaignDraft], responses=HTTP_500_RESPONSE)
+async def get_latest_campaign_draft(
+    db: AsyncSession = Depends(get_postgres_session),
+    current_user: User = Depends(require_read)
+):
+    """Retrieves the most recently worked on campaign draft to resume on browser refresh."""
+    try:
+        workspace_id = str(getattr(current_user, "workspace_id", "workspace_dev"))
+        return await draft_service.get_latest_draft(workspace_id, db)
+    except Exception as e:
+        raise _fail("/drafts/latest", e)
+
+
+@router.get("/drafts", response_model=ListCampaignDraftsResponse, responses=HTTP_500_RESPONSE)
+async def list_campaign_drafts(
+    db: AsyncSession = Depends(get_postgres_session),
+    current_user: User = Depends(require_read)
+):
+    """Lists saved campaign drafts for multi-campaign switching."""
+    try:
+        workspace_id = str(getattr(current_user, "workspace_id", "workspace_dev"))
+        drafts = await draft_service.list_drafts(workspace_id, db)
+        return ListCampaignDraftsResponse(drafts=drafts, total=len(drafts))
+    except Exception as e:
+        raise _fail("/drafts", e)
+
+
+@router.get("/drafts/{campaign_id}", response_model=CampaignDraft, responses={**HTTP_404_RESPONSE, **HTTP_500_RESPONSE})
+async def get_campaign_draft(
+    campaign_id: str,
+    db: AsyncSession = Depends(get_postgres_session),
+    current_user: User = Depends(require_read)
+):
+    """Retrieves a specific campaign draft by its stable ID."""
+    try:
+        workspace_id = str(getattr(current_user, "workspace_id", "workspace_dev"))
+        draft = await draft_service.get_draft(campaign_id, workspace_id, db)
+        if not draft:
+            raise HTTPException(status_code=404, detail="Campaign draft not found")
+        return draft
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise _fail(f"/drafts/{campaign_id}", e)
+
+
+@router.delete("/drafts/{campaign_id}", responses={**HTTP_404_RESPONSE, **HTTP_500_RESPONSE})
+async def delete_campaign_draft(
+    campaign_id: str,
+    db: AsyncSession = Depends(get_postgres_session),
+    current_user: User = Depends(require_write)
+):
+    """Deletes a campaign draft."""
+    try:
+        workspace_id = str(getattr(current_user, "workspace_id", "workspace_dev"))
+        deleted = await draft_service.delete_draft(campaign_id, workspace_id, db)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Campaign draft not found")
+        return {"status": "ok", "deleted": True, "campaign_id": campaign_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise _fail(f"/drafts/{campaign_id}", e)
+
 
 

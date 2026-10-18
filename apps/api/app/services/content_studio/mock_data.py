@@ -100,16 +100,12 @@ def generate_demo_canvas(prompt: str, width: int = 1024, height: int = 1024, sty
 
 SAMPLE_PREVIEW_VIDEOS = [
     {
-        "title": "Cinematic Drone Flythrough",
-        "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
+        "title": "Cinematic Aerial Motion",
+        "url": "/api/v1/content-studio/media/sample_preview_1.mp4"
     },
     {
-        "title": "Dynamic Landscape Escape",
-        "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"
-    },
-    {
-        "title": "Vibrant Motion Fun",
-        "url": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4"
+        "title": "Dynamic Urban Scene",
+        "url": "/api/v1/content-studio/media/sample_preview_2.mp4"
     }
 ]
 

@@ -28,18 +28,88 @@ interface TrendRadarPageProps {
   investigatingId: string | null;
 }
 
-function formatRelativeTime(date: Date | string | null | undefined): string {
-  if (!date) return 'Not yet updated';
+interface FreshnessState {
+  label: 'Fresh' | 'Recent' | 'Aging' | 'Stale' | 'Unknown';
+  badgeClass: string;
+  tooltip: string;
+  relativeText: string;
+}
+
+function getFreshnessState(date: Date | string | null | undefined): FreshnessState {
+  if (!date) {
+    return {
+      label: 'Unknown',
+      badgeClass: 'badge-neutral',
+      tooltip: 'No sync timestamp recorded',
+      relativeText: 'Timestamp unavailable'
+    };
+  }
+
   const d = typeof date === 'string' ? new Date(date) : date;
-  if (isNaN(d.getTime())) return 'Recently';
+  if (isNaN(d.getTime())) {
+    return {
+      label: 'Unknown',
+      badgeClass: 'badge-neutral',
+      tooltip: 'Invalid timestamp format',
+      relativeText: 'Timestamp unavailable'
+    };
+  }
 
   const now = new Date();
+  const diffMinutes = Math.floor((now.getTime() - d.getTime()) / (1000 * 60));
   const diffSec = Math.floor((now.getTime() - d.getTime()) / 1000);
 
-  if (diffSec < 60) return 'Just now';
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  let relativeText = 'Just now';
+  if (diffSec >= 60 && diffSec < 3600) {
+    relativeText = `${Math.floor(diffSec / 60)}m ago`;
+  } else if (diffSec >= 3600 && diffSec < 86400) {
+    relativeText = `${Math.floor(diffSec / 3600)}h ago`;
+  } else if (diffSec >= 86400) {
+    relativeText = `${Math.floor(diffSec / 86400)}d ago`;
+  }
+
+  const formattedDate = d.toLocaleString([], {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+
+  if (diffMinutes < 30) {
+    return {
+      label: 'Fresh',
+      badgeClass: 'badge-emerald',
+      tooltip: `Verified fresh (${relativeText}) · Last retrieval: ${formattedDate}`,
+      relativeText: `Updated ${relativeText}`
+    };
+  }
+
+  if (diffMinutes < 180) {
+    return {
+      label: 'Recent',
+      badgeClass: 'badge-cyan',
+      tooltip: `Recent snapshot (${relativeText}) · Last retrieval: ${formattedDate}`,
+      relativeText: `Updated ${relativeText}`
+    };
+  }
+
+  if (diffMinutes < 1440) {
+    return {
+      label: 'Aging',
+      badgeClass: 'badge-amber',
+      tooltip: `Data is aging (${relativeText}) · Consider refreshing · Last retrieval: ${formattedDate}`,
+      relativeText: `Updated ${relativeText}`
+    };
+  }
+
+  return {
+    label: 'Stale',
+    badgeClass: 'badge-neutral',
+    tooltip: `Data is stale (>24h old) · Last retrieval: ${formattedDate}`,
+    relativeText: `Updated ${relativeText}`
+  };
 }
 
 export const TrendRadarPage: React.FC<TrendRadarPageProps> = ({
@@ -133,13 +203,16 @@ export const TrendRadarPage: React.FC<TrendRadarPageProps> = ({
       });
   }, [trends, searchQuery, selectedCategory, selectedStage, sortBy]);
 
-  const isFilterActive = searchQuery !== '' || selectedCategory !== 'all' || selectedStage !== 'all' || sortBy !== 'score';
+  const isFilterActive = searchQuery.trim() !== '' || selectedCategory !== 'all' || selectedStage !== 'all' || sortBy !== 'score' || region !== 'IN';
 
   const handleResetFilters = () => {
     setSearchQuery('');
     setSelectedCategory('all');
     setSelectedStage('all');
     setSortBy('score');
+    if (region !== 'IN') {
+      onRegionChange('IN');
+    }
   };
 
   // Determine latest observation timestamp from dataset if explicit lastUpdated is absent
@@ -152,8 +225,10 @@ export const TrendRadarPage: React.FC<TrendRadarPageProps> = ({
     return timestamps.length > 0 ? new Date(Math.max(...timestamps)) : null;
   }, [lastUpdated, trends]);
 
-  // Data freshness indication: fresh if actively updated in session, otherwise cached snapshot
-  const isDataFresh = Boolean(lastUpdated);
+  // Derived freshness based on verified threshold policy
+  const freshness = useMemo(() => {
+    return getFreshnessState(effectiveUpdatedTime);
+  }, [effectiveUpdatedTime]);
 
   return (
     <div className="page-container animate-fade-in">
@@ -173,11 +248,14 @@ export const TrendRadarPage: React.FC<TrendRadarPageProps> = ({
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {/* Last Updated Timestamp & Freshness Indicator */}
             {effectiveUpdatedTime && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+              <div 
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: 'var(--text-secondary)' }}
+                title={freshness.tooltip}
+              >
                 <IconClock size={13} color="var(--text-muted)" />
-                <span>Last updated: {formatRelativeTime(effectiveUpdatedTime)}</span>
-                <span className={`badge ${isDataFresh ? 'badge-cyan' : 'badge-neutral'}`} style={{ fontSize: '0.65rem', padding: '1px 6px' }}>
-                  {isDataFresh ? 'Fresh snapshot' : 'Cached snapshot'}
+                <span>{freshness.relativeText}</span>
+                <span className={`badge ${freshness.badgeClass}`} style={{ fontSize: '0.65rem', padding: '1px 6px' }}>
+                  {freshness.label}
                 </span>
               </div>
             )}
@@ -187,7 +265,7 @@ export const TrendRadarPage: React.FC<TrendRadarPageProps> = ({
               className="btn-primary" 
               disabled={syncing}
               aria-label="Refresh trends from provider"
-              style={{ padding: '9px 18px', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '8px' }}
+              style={{ padding: '8px 16px', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '8px', whiteSpace: 'nowrap' }}
             >
               <IconRefresh size={15} className={syncing ? 'spin-animation' : ''} />
               <span>{syncing ? 'Refreshing trends...' : 'Refresh trends'}</span>
@@ -230,7 +308,7 @@ export const TrendRadarPage: React.FC<TrendRadarPageProps> = ({
       )}
 
       {/* Filter & Controls Bar */}
-      <div className="glass-card" style={{ padding: '16px 20px', marginBottom: '24px' }}>
+      <div className="glass-card" style={{ padding: '14px 18px', marginBottom: '20px' }}>
         <div className="filter-bar-grid">
           {/* Search Query with Inside Clear Icon */}
           <div className="filter-field-group">
@@ -326,15 +404,22 @@ export const TrendRadarPage: React.FC<TrendRadarPageProps> = ({
           </div>
         </div>
 
-        {/* Dynamic Filter Status Bar & Reset Action */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--border-subtle)', flexWrap: 'wrap', gap: '8px' }}>
-          <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-            {isFilterActive ? (
-              <span>Showing <strong>{filteredTrends.length}</strong> of <strong>{trends.length}</strong> trends matching criteria</span>
-            ) : (
-              <span><strong>{trends.length}</strong> trends found</span>
-            )}
+        {/* Dynamic Filter Status Bar, Qualification Info & Reset Action */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--border-subtle)', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+              {isFilterActive ? (
+                <span>Showing <strong>{filteredTrends.length}</strong> of <strong>{trends.length}</strong> trends</span>
+              ) : (
+                <span><strong>{trends.length}</strong> trends identified</span>
+              )}
+            </div>
+            <span style={{ color: 'var(--border-strong)', fontSize: '0.8rem' }}>•</span>
+            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              Qualification threshold: <strong style={{ color: 'var(--text-primary)' }}>Momentum ≥ 70</strong>
+            </div>
           </div>
+
           {isFilterActive && (
             <button
               type="button"
@@ -373,8 +458,8 @@ export const TrendRadarPage: React.FC<TrendRadarPageProps> = ({
           return (
             <div key={item.trend_id} className="trend-card">
               <div>
-                {/* Header: Category & Stage */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                {/* 1. Header: Category, Trend Stage & Investigation Status Badges */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', gap: '8px', flexWrap: 'wrap' }}>
                   <span className="badge badge-cyan" style={{ fontSize: '0.72rem' }}>
                     {item.category || 'General'}
                   </span>
@@ -386,7 +471,7 @@ export const TrendRadarPage: React.FC<TrendRadarPageProps> = ({
                         stage === 'Emerging' ? 'badge-blue' : 'badge-amber'
                       }`}
                       style={{ fontSize: '0.68rem' }}
-                      title={`Stage: ${stage}`}
+                      title={`Growth stage: ${stage}`}
                     >
                       {stage}
                     </span>
@@ -400,142 +485,125 @@ export const TrendRadarPage: React.FC<TrendRadarPageProps> = ({
                   </div>
                 </div>
 
-                {/* Topic Title */}
+                {/* 2. Topic Title */}
                 <h3 style={{ fontSize: '1.15rem', fontWeight: 600, marginBottom: '12px', color: 'var(--text-primary)', textTransform: 'capitalize', lineHeight: 1.35 }}>
                   {item.topic}
                 </h3>
 
-                {/* Provider Metrics (Clean White Surface) */}
-                <div style={{ marginBottom: '14px', background: '#FFFFFF', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-subtle)', boxShadow: 'var(--shadow-sm)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Search Growth &amp; Volume
-                    </span>
-                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
-                      Google Trends
-                    </span>
+                {/* 3. Search Volume and Momentum Score (Clean open layout without nested box) */}
+                <div className="radar-card-metrics">
+                  {/* Left: Volume & Spike */}
+                  <div className="radar-card-metric-col">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      {item.provider_metrics.search_volume !== null ? (
+                        <span 
+                          className="metric-pill metric-pill-cyan" 
+                          title="Estimated Google Trends query volume threshold"
+                        >
+                          <IconSearch size={12} />
+                          <span>{item.provider_metrics.search_volume.toLocaleString()}+ searches</span>
+                        </span>
+                      ) : (
+                        <span 
+                          className="metric-pill" 
+                          title="Query volume is below provider reporting threshold"
+                        >
+                          Volume unlisted
+                        </span>
+                      )}
+
+                      {item.provider_metrics.increase_percentage !== null ? (
+                        <span 
+                          className="metric-pill metric-pill-green" 
+                          title="Relative search spike percentage over baseline window"
+                        >
+                          <IconTrendingUp size={12} />
+                          <span>+{Math.round(item.provider_metrics.increase_percentage)}% Spike</span>
+                        </span>
+                      ) : (
+                        <span 
+                          className="metric-pill" 
+                          title="Spike percentage is unlisted by provider"
+                        >
+                          Steady baseline
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Comparison Baseline */}
+                    <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      {item.provider_metrics.start_timestamp && item.provider_metrics.end_timestamp
+                        ? `${new Date(item.provider_metrics.start_timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${new Date(item.provider_metrics.end_timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' })}`
+                        : 'Google Trends · 24h baseline'}
+                    </div>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    {/* Search Volume Pill */}
-                    {item.provider_metrics.search_volume !== null ? (
-                      <span 
-                        className="metric-pill metric-pill-cyan" 
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-                        title="Estimated Google Trends query volume threshold"
-                      >
-                        <IconSearch size={12} />
-                        <span>{item.provider_metrics.search_volume.toLocaleString()}+ searches</span>
-                      </span>
-                    ) : (
-                      <span 
-                        className="metric-pill" 
-                        style={{ color: 'var(--text-muted)' }}
-                        title="Query volume is below provider reporting threshold"
-                      >
-                        Volume unlisted
-                      </span>
-                    )}
-
-                    {/* Percentage Spike Pill */}
-                    {item.provider_metrics.increase_percentage !== null ? (
-                      <span 
-                        className="metric-pill metric-pill-green" 
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-                        title="Relative search spike percentage over baseline window"
-                      >
-                        <IconTrendingUp size={12} />
-                        <span>+{Math.round(item.provider_metrics.increase_percentage)}% Spike</span>
-                      </span>
-                    ) : (
-                      <span 
-                        className="metric-pill" 
-                        style={{ color: 'var(--text-muted)' }}
-                        title="Spike percentage is unlisted by provider"
-                      >
-                        Steady baseline
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Measurement Period Note */}
-                  <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '8px' }}>
-                    {item.provider_metrics.start_timestamp && item.provider_metrics.end_timestamp
-                      ? `Period: ${new Date(item.provider_metrics.start_timestamp).toLocaleDateString()} – ${new Date(item.provider_metrics.end_timestamp).toLocaleDateString()}`
-                      : 'Comparison window: Source provider baseline (24h)'}
-                  </div>
-                </div>
-
-                {/* Qualification Ring & Explanatory Popover */}
-                <div style={{ position: 'relative', marginBottom: '14px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span>Momentum:</span>
-                        <strong style={{ color: qualPct >= 70 ? 'var(--status-success)' : 'var(--text-primary)' }}>
-                          {qualPct}/100
-                        </strong>
+                  {/* Right: Momentum Gauge & Score */}
+                  <div className="radar-card-momentum-col">
+                    <div className="score-display" style={{ '--score': qualPct } as React.CSSProperties} title={`Momentum score: ${qualPct}/100`}>
+                      <div className="score-inner">{qualPct}</div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          Momentum
+                        </span>
                         <button
                           type="button"
                           className="info-popover-trigger"
                           onClick={() => setActiveInfoTrendId(isInfoOpen ? null : item.trend_id)}
                           aria-label="View momentum scoring methodology"
                           title="Click to view momentum scoring breakdown"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: isInfoOpen ? 'var(--action-primary)' : 'var(--text-muted)' }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'inline-flex', alignItems: 'center', color: isInfoOpen ? 'var(--action-primary)' : 'var(--text-muted)' }}
                         >
-                          <IconInfo size={14} />
+                          <IconInfo size={13} />
                         </button>
                       </div>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: qualPct >= 70 ? 'var(--status-success)' : 'var(--text-secondary)' }}>
+                        {qualPct}/100
+                      </span>
+                    </div>
 
-                      <div style={{ fontSize: '0.68rem', color: qualPct >= 70 ? 'var(--status-success)' : 'var(--text-muted)', marginTop: '2px', fontWeight: qualPct >= 70 ? 500 : 400 }}>
-                        {qualPct >= 70 ? 'Meets qualification criteria (≥70)' : 'Candidate under threshold (<70)'}
+                    {/* Explanatory Popover for Momentum Methodology */}
+                    {isInfoOpen && (
+                      <div ref={popoverRef} className="scoring-info-popover">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <strong style={{ fontSize: '0.82rem', color: 'var(--text-primary)' }}>
+                            Editorial Momentum Index
+                          </strong>
+                          <button
+                            type="button"
+                            onClick={() => setActiveInfoTrendId(null)}
+                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
+                            title="Close"
+                          >
+                            <IconClose size={13} />
+                          </button>
+                        </div>
+
+                        <p style={{ margin: '0 0 8px 0', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                          Indicates viral breakout velocity. Scores ≥ 70 qualify for automated research.
+                        </p>
+
+                        <div style={{ background: 'var(--surface-secondary, #F8FAFC)', padding: '8px 10px', borderRadius: '6px', fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: '8px', lineHeight: 1.5 }}>
+                          <div>• <strong>35% Velocity:</strong> Search volume &amp; percentage spike factor</div>
+                          <div>• <strong>25% Acceleration:</strong> Growth trajectory vs prior observation</div>
+                          <div>• <strong>20% Novelty:</strong> Index freshness &amp; topic breakout newness</div>
+                          <div>• <strong>10% Persistence:</strong> Sustained multi-interval search interest</div>
+                          <div>• <strong>10% Source Density:</strong> Cross-platform signal coverage</div>
+                        </div>
+
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                          Formula: 0.35 Vel + 0.25 Acc + 0.20 Nov + 0.10 Persist + 0.10 Source
+                        </div>
                       </div>
-                    </div>
-
-                    <div className="score-display" style={{ '--score': qualPct } as React.CSSProperties}>
-                      <div className="score-inner">{qualPct}</div>
-                    </div>
+                    )}
                   </div>
-
-                  {/* Explanatory Popover for Momentum Methodology */}
-                  {isInfoOpen && (
-                    <div ref={popoverRef} className="scoring-info-popover" style={{ top: '100%', left: 0, marginTop: '6px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                        <strong style={{ fontSize: '0.82rem', color: 'var(--text-primary)' }}>
-                          Editorial Momentum Index
-                        </strong>
-                        <button
-                          type="button"
-                          onClick={() => setActiveInfoTrendId(null)}
-                          style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
-                          title="Close"
-                        >
-                          <IconClose size={13} />
-                        </button>
-                      </div>
-
-                      <p style={{ margin: '0 0 8px 0', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                        Indicates viral velocity and editorial priority. Scores ≥ 70 qualify for automated research.
-                      </p>
-
-                      <div style={{ background: 'var(--surface-secondary, #F8FAFC)', padding: '8px 10px', borderRadius: '6px', fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: '8px', lineHeight: 1.5 }}>
-                        <div>• <strong>35% Velocity:</strong> Search volume &amp; percentage spike factor</div>
-                        <div>• <strong>25% Acceleration:</strong> Growth trajectory vs prior observation</div>
-                        <div>• <strong>20% Novelty:</strong> Index freshness &amp; topic breakout newness</div>
-                        <div>• <strong>10% Persistence:</strong> Sustained multi-interval search interest</div>
-                        <div>• <strong>10% Source Density:</strong> Cross-platform signal coverage</div>
-                      </div>
-
-                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                        Formula: 0.35 Vel + 0.25 Acc + 0.20 Nov + 0.10 Persist + 0.10 Source
-                      </div>
-                    </div>
-                  )}
                 </div>
 
-                {/* Related breakdown terms (Clickable to Filter) */}
+                {/* 4. Related breakdown terms (Clickable to Filter) */}
                 {item.provider_metrics.trend_breakdown && item.provider_metrics.trend_breakdown.length > 0 && (
-                  <div style={{ marginBottom: '14px' }}>
+                  <div style={{ marginTop: '2px', marginBottom: '8px' }}>
                     <div style={{ fontSize: '0.68rem', color: 'var(--text-secondary)', marginBottom: '5px', fontWeight: 500 }}>
                       Related Searches:
                     </div>
@@ -556,53 +624,57 @@ export const TrendRadarPage: React.FC<TrendRadarPageProps> = ({
                 )}
               </div>
 
-              {/* Card Action Area: Completed vs In Progress vs Not Yet Investigated */}
-              <div style={{ marginTop: '14px', borderTop: '1px solid var(--border-subtle)', paddingTop: '14px' }}>
+              {/* 5. Card Action Area: Completed vs In Progress vs Not Yet Investigated */}
+              <div className="radar-card-actions">
                 {isInvestigated ? (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  <div className="radar-action-group">
                     <span 
                       className="badge badge-emerald" 
                       style={{ 
-                        fontSize: '0.78rem', 
-                        padding: '6px 10px', 
+                        fontSize: '0.75rem', 
+                        padding: '5px 8px', 
                         display: 'inline-flex', 
                         alignItems: 'center', 
                         gap: '5px',
-                        borderRadius: '6px'
+                        borderRadius: '6px',
+                        whiteSpace: 'nowrap'
                       }}
                     >
-                      <IconCheck size={13} color="var(--status-success)" />
-                      <span>Investigation Complete</span>
+                      <IconCheck size={12} color="var(--status-success)" />
+                      <span>Investigated</span>
                     </span>
                     <button 
+                      type="button"
                       className="btn-outline" 
-                      style={{ fontSize: '0.82rem', padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '5px' }}
+                      style={{ fontSize: '0.8rem', padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}
                       onClick={() => onViewInvestigation ? onViewInvestigation(matchingInv?.investigation_id) : onLaunchInvestigation(item.topic, item.trend_id)}
-                      title="Open existing investigation intelligence report"
+                      title="Open existing investigation record"
                     >
                       <span>View investigation</span>
                       <IconArrowRight size={13} />
                     </button>
                   </div>
                 ) : isInvestigating ? (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  <div className="radar-action-group">
                     <span 
                       className="badge badge-cyan" 
                       style={{ 
-                        fontSize: '0.78rem', 
-                        padding: '6px 10px', 
+                        fontSize: '0.75rem', 
+                        padding: '5px 8px', 
                         display: 'inline-flex', 
                         alignItems: 'center', 
                         gap: '6px',
-                        borderRadius: '6px'
+                        borderRadius: '6px',
+                        whiteSpace: 'nowrap'
                       }}
                     >
                       <span className="pulse-dot" />
-                      <span>Agents Investigating...</span>
+                      <span>Investigating...</span>
                     </span>
                     <button 
+                      type="button"
                       className="btn-outline" 
-                      style={{ fontSize: '0.82rem', padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '5px' }}
+                      style={{ fontSize: '0.8rem', padding: '6px 12px', display: 'inline-flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}
                       onClick={() => onViewInvestigation ? onViewInvestigation(matchingInv?.investigation_id) : undefined}
                       title="View active research progress"
                     >
@@ -612,8 +684,9 @@ export const TrendRadarPage: React.FC<TrendRadarPageProps> = ({
                   </div>
                 ) : (
                   <button 
+                    type="button"
                     className="btn-primary" 
-                    style={{ width: '100%', fontSize: '0.85rem', padding: '9px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                    style={{ width: '100%', fontSize: '0.85rem', padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', whiteSpace: 'nowrap' }}
                     onClick={() => onLaunchInvestigation(item.topic, item.trend_id)}
                     title="Launch autonomous multi-source research investigation"
                   >
@@ -656,4 +729,3 @@ export const TrendRadarPage: React.FC<TrendRadarPageProps> = ({
     </div>
   );
 };
-

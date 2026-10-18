@@ -19,7 +19,8 @@ import {
   IconClose,
   IconCheck,
   IconSparkles,
-  IconLightning
+  IconLightning,
+  IconInfo
 } from './components/Icons';
 
 import { OverviewPage } from './pages/OverviewPage';
@@ -31,6 +32,21 @@ import { WatchlistsPage } from './pages/WatchlistsPage';
 import { AdminPage } from './pages/AdminPage';
 
 import { API_BASE } from './apiConfig';
+
+function ScoreTooltip({ title, text, align = 'center' }: { title?: string; text: string; align?: 'center' | 'left' | 'right' }) {
+  const alignClass = align === 'right' ? 'tooltip-align-right' : align === 'left' ? 'tooltip-align-left' : '';
+  return (
+    <span className="tooltip-wrapper" tabIndex={0} role="tooltip" aria-label={text} style={{ marginLeft: '4px' }}>
+      <span className="tooltip-icon-btn">
+        <IconInfo size={13} />
+      </span>
+      <span className={`tooltip-content ${alignClass}`}>
+        {title && <strong style={{ display: 'block', marginBottom: '3px', color: '#38BDF8', fontWeight: 600 }}>{title}</strong>}
+        <span>{text}</span>
+      </span>
+    </span>
+  );
+}
 
 export function App() {
   // Navigation & Role
@@ -56,6 +72,7 @@ export function App() {
 
   // Modals & Drawers
   const [selectedBrief, setSelectedBrief] = useState<Opportunity | null>(null);
+  const [stagedOpportunityId, setStagedOpportunityId] = useState<string | null>(null);
   const [selectedEvidence, setSelectedEvidence] = useState<{
     item: EvidenceDetail;
     label?: string;
@@ -208,8 +225,14 @@ export function App() {
     setInvestigatingId(topic);
     setStatusMsg(`Dispatching autonomous research graph for: "${topic}"...`);
     try {
-      const payload: { topic: string; trend_id?: string } = { topic };
+      const payload: { topic: string; trend_id?: string; related_topics?: string[] } = { topic };
       if (trendId) payload.trend_id = trendId;
+
+      // Find trend in trends state to pass related_topics (trend_breakdown)
+      const matchingTrend = trends.find(t => (trendId && t.trend_id === trendId) || t.topic.toLowerCase() === topic.toLowerCase());
+      if (matchingTrend && matchingTrend.provider_metrics?.trend_breakdown && matchingTrend.provider_metrics.trend_breakdown.length > 0) {
+        payload.related_topics = matchingTrend.provider_metrics.trend_breakdown;
+      }
 
       const res = await fetch(`${API_BASE}/investigations/`, {
         method: 'POST',
@@ -283,6 +306,10 @@ export function App() {
     } catch (err) {
       console.error('Failed to select opportunity:', err);
     }
+    // Navigate immediately to studio with the staged opportunity
+    setSelectedBrief(null);
+    setStagedOpportunityId(oppId);
+    setActivePage('studio');
   };
 
   return (
@@ -394,13 +421,15 @@ export function App() {
           />
         )}
 
-        {activePage === 'studio' && (
+        <div style={{ display: activePage === 'studio' ? 'block' : 'none' }}>
           <ContentStudioPage
             opportunities={opportunities}
             onSelectBrief={setSelectedBrief}
             onDownloadPdf={handleDownloadPdf}
+            stagedOpportunityId={stagedOpportunityId}
+            onClearStagedOpportunity={() => setStagedOpportunityId(null)}
           />
-        )}
+        </div>
 
         {activePage === 'watchlists' && <WatchlistsPage />}
 
@@ -444,6 +473,16 @@ export function App() {
               </button>
             </div>
 
+            {/* Strategic Background & Rationale */}
+            {selectedBrief.strategic_rationale && (
+              <div className="brief-section" style={{ borderLeft: '3px solid var(--accent-blue)', background: 'var(--surface-primary)' }}>
+                <div className="brief-label">Strategic Context &amp; Market Catalyst</div>
+                <div className="brief-value" style={{ lineHeight: 1.6 }}>
+                  {selectedBrief.strategic_rationale}
+                </div>
+              </div>
+            )}
+
             {/* Target Audience & Need */}
             <div className="grid-2" style={{ marginBottom: '16px' }}>
               <div className="brief-section" style={{ margin: 0 }}>
@@ -455,6 +494,18 @@ export function App() {
                   <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '6px', margin: 0 }}>
                     {selectedBrief.audience_description}
                   </p>
+                )}
+                {selectedBrief.target_audience_pain_points && selectedBrief.target_audience_pain_points.length > 0 && (
+                  <div style={{ marginTop: '10px', borderTop: '1px solid var(--border-subtle)', paddingTop: '8px' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
+                      Key User Frictions
+                    </div>
+                    <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                      {selectedBrief.target_audience_pain_points.map((pt, i) => (
+                        <li key={i} style={{ marginBottom: '2px' }}>{pt}</li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </div>
 
@@ -481,6 +532,63 @@ export function App() {
               </div>
             </div>
 
+            {/* Key Editorial Talking Points */}
+            {selectedBrief.key_talking_points && selectedBrief.key_talking_points.length > 0 && (
+              <div className="brief-section">
+                <div className="brief-label">Key Editorial Talking Points &amp; Pillars</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                  {selectedBrief.key_talking_points.map((tp, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '0.88rem' }}>
+                      <span style={{ color: 'var(--brand-teal)', fontWeight: 700 }}>•</span>
+                      <span style={{ color: 'var(--text-primary)' }}>{tp}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Recommended Content Outline */}
+            {selectedBrief.recommended_outline && selectedBrief.recommended_outline.length > 0 && (
+              <div className="brief-section">
+                <div className="brief-label">Recommended Content Structure &amp; Outline</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+                  {selectedBrief.recommended_outline.map((sec, i) => (
+                    <div key={i} style={{ padding: '8px 12px', background: 'var(--surface-primary)', border: '1px solid var(--border-subtle)', borderRadius: '6px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px', flexWrap: 'wrap', gap: '4px' }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-primary)' }}>{sec.section_title}</span>
+                        {sec.suggested_visual_or_element && (
+                          <span style={{ fontSize: '0.75rem', color: 'var(--accent-blue)', background: 'var(--accent-blue-subtle)', padding: '2px 6px', borderRadius: '4px' }}>
+                            {sec.suggested_visual_or_element}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>{sec.key_takeaway}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Scroll-Stopping Hooks */}
+            {selectedBrief.hook_options && selectedBrief.hook_options.length > 0 && (
+              <div className="brief-section">
+                <div className="brief-label">Scroll-Stopping Hook Options</div>
+                <div className="grid-2" style={{ gap: '8px', marginTop: '6px' }}>
+                  {selectedBrief.hook_options.map((h, i) => (
+                    <div key={i} style={{ padding: '8px 12px', background: 'var(--surface-primary)', border: '1px solid var(--border-subtle)', borderRadius: '6px' }}>
+                      <span className="badge badge-cyan" style={{ fontSize: '0.7rem', padding: '1px 6px', marginBottom: '4px', display: 'inline-block' }}>
+                        {h.hook_type}
+                      </span>
+                      <div style={{ fontWeight: 600, fontSize: '0.86rem', color: 'var(--text-primary)', margin: '3px 0' }}>
+                        "{h.headline}"
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{h.rationale}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Format & Score Components */}
             <div className="grid-2" style={{ marginBottom: '16px' }}>
               <div className="brief-section" style={{ margin: 0 }}>
@@ -499,20 +607,48 @@ export function App() {
               </div>
 
               <div className="brief-section" style={{ margin: 0 }}>
-                <div className="brief-label">Deterministic Score Breakdown</div>
+                <div className="brief-label" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <span>Deterministic Score Breakdown</span>
+                  <ScoreTooltip
+                    title="Deterministic Scoring Formula"
+                    text="Composite opportunity score: 30% Search Velocity + 30% Content Void/Gap + 20% Community Urgency + 10% Freshness + 10% Cross-Source Corroboration."
+                    align="right"
+                  />
+                </div>
                 {selectedBrief.score_breakdown ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.82rem', marginTop: '4px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.82rem', marginTop: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ color: 'var(--text-muted)' }}>Search Velocity:</span>
-                      <span style={{ fontWeight: 600 }}>{Math.round((selectedBrief.score_breakdown.demand_volume || 0) * 100)}%</span>
+                      <span style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center' }}>
+                        <span>{Math.round((selectedBrief.score_breakdown.demand_volume || selectedBrief.score_breakdown.trend_momentum || 0) * 100)}%</span>
+                        <ScoreTooltip
+                          title="Search Velocity"
+                          text="Measures real-time search volume acceleration, keyword growth rate, and query density across Google Trends, Google News, and YouTube."
+                          align="right"
+                        />
+                      </span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ color: 'var(--text-muted)' }}>Content Void / Gap:</span>
-                      <span style={{ fontWeight: 600 }}>{Math.round((selectedBrief.score_breakdown.competition_gap || 0) * 100)}%</span>
+                      <span style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center' }}>
+                        <span>{Math.round((selectedBrief.score_breakdown.competition_gap || selectedBrief.score_breakdown.content_gap || 0) * 100)}%</span>
+                        <ScoreTooltip
+                          title="Content Void / Gap"
+                          text="Quantifies the deficit in current media. Higher score indicates existing articles and videos are superficial, outdated, or absent, leaving a high-value void."
+                          align="right"
+                        />
+                      </span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ color: 'var(--text-muted)' }}>Community Urgency:</span>
-                      <span style={{ fontWeight: 600 }}>{Math.round((selectedBrief.score_breakdown.audience_fit || 0) * 100)}%</span>
+                      <span style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center' }}>
+                        <span>{Math.round((selectedBrief.score_breakdown.audience_fit || selectedBrief.score_breakdown.audience_demand || 0) * 100)}%</span>
+                        <ScoreTooltip
+                          title="Community Urgency"
+                          text="Measures the intensity of audience friction, unresolved user questions, and readiness to engage, derived from viewer comments and community discussions."
+                          align="right"
+                        />
+                      </span>
                     </div>
                   </div>
                 ) : (

@@ -35,6 +35,11 @@ class OpportunityResponse(BaseModel):
     problem: Optional[str] = None
     audience_need: Optional[str] = None
     content_gap: Optional[str] = None
+    strategic_rationale: Optional[str] = None
+    key_talking_points: Optional[List[str]] = None
+    target_audience_pain_points: Optional[List[str]] = None
+    recommended_outline: Optional[List[Dict[str, Any]]] = None
+    hook_options: Optional[List[Dict[str, Any]]] = None
     recommended_angle: Optional[str] = None
     recommended_format: Optional[str] = None
     supported_formats: List[str] = [
@@ -49,7 +54,7 @@ class OpportunityResponse(BaseModel):
     status: str = "suggested"
 
 
-def _parse_json_list(val: Any) -> List[str]:
+def _parse_json_list(val: Any) -> List[Any]:
     if not val:
         return []
     if isinstance(val, str):
@@ -58,7 +63,7 @@ def _parse_json_list(val: Any) -> List[str]:
         except Exception:
             return [val]
     if isinstance(val, list):
-        return [str(x) for x in val if str(x).strip()]
+        return val
     return []
 
 
@@ -90,6 +95,8 @@ async def list_opportunities(
                    a.description as audience_description, a.needs as audience_needs,
                    a.questions as audience_questions, a.concerns as audience_concerns,
                    o.title, o.score, o.problem, o.audience_need, o.content_gap,
+                   o.strategic_rationale, o.key_talking_points, o.target_audience_pain_points,
+                   o.recommended_outline, o.hook_options,
                    o.recommended_angle, o.recommended_format, o.score_breakdown,
                    COALESCE(o.evidence_ids, '[]'::jsonb) as evidence_ids,
                    COALESCE(o.status, 'suggested') as status
@@ -117,10 +124,15 @@ async def list_opportunities(
                 problem=row.get("problem") or "Underserved audience need",
                 audience_need=row.get("audience_need") or "High interest, missing high-quality guidance",
                 content_gap=row.get("content_gap") or "Absence of clear, comprehensive synthesis",
+                strategic_rationale=row.get("strategic_rationale") or "",
+                key_talking_points=_parse_json_list(row.get("key_talking_points")),
+                target_audience_pain_points=_parse_json_list(row.get("target_audience_pain_points")),
+                recommended_outline=_parse_json_list(row.get("recommended_outline")),
+                hook_options=_parse_json_list(row.get("hook_options")),
                 recommended_angle=row.get("recommended_angle") or "Practical, actionable guide with data",
                 recommended_format=row.get("recommended_format") or "Explainer Article / Video Script",
                 score_breakdown=_parse_dict(row.get("score_breakdown")),
-                evidence_ids=_parse_json_list(row.get("evidence_ids")),
+                evidence_ids=[str(x) for x in _parse_json_list(row.get("evidence_ids"))],
                 status=row.get("status") or "suggested"
             )
         )
@@ -140,6 +152,8 @@ async def get_opportunity(
                    a.description as audience_description, a.needs as audience_needs,
                    a.questions as audience_questions, a.concerns as audience_concerns,
                    o.title, o.score, o.problem, o.audience_need, o.content_gap,
+                   o.strategic_rationale, o.key_talking_points, o.target_audience_pain_points,
+                   o.recommended_outline, o.hook_options,
                    o.recommended_angle, o.recommended_format, o.score_breakdown,
                    COALESCE(o.evidence_ids, '[]'::jsonb) as evidence_ids,
                    COALESCE(o.status, 'suggested') as status
@@ -153,7 +167,7 @@ async def get_opportunity(
     if not row:
         raise HTTPException(status_code=404, detail="Opportunity not found")
 
-    ev_ids = _parse_json_list(row.get("evidence_ids"))
+    ev_ids = [str(x) for x in _parse_json_list(row.get("evidence_ids"))]
     evidence_refs: List[EvidenceReference] = []
 
     if row.get("investigation_id"):
@@ -193,6 +207,11 @@ async def get_opportunity(
         problem=row.get("problem") or "Underserved audience need",
         audience_need=row.get("audience_need") or "High interest, missing high-quality guidance",
         content_gap=row.get("content_gap") or "Absence of clear, comprehensive synthesis",
+        strategic_rationale=row.get("strategic_rationale") or "",
+        key_talking_points=_parse_json_list(row.get("key_talking_points")),
+        target_audience_pain_points=_parse_json_list(row.get("target_audience_pain_points")),
+        recommended_outline=_parse_json_list(row.get("recommended_outline")),
+        hook_options=_parse_json_list(row.get("hook_options")),
         recommended_angle=row.get("recommended_angle") or "Practical, actionable guide with data",
         recommended_format=row.get("recommended_format") or "Explainer Article / Video Script",
         score_breakdown=_parse_dict(row.get("score_breakdown")),
@@ -260,6 +279,8 @@ async def download_opportunity_pdf(
                    a.description as audience_description, a.needs as audience_needs,
                    a.questions as audience_questions, a.concerns as audience_concerns,
                    o.title, o.score, o.problem, o.audience_need, o.content_gap,
+                   o.strategic_rationale, o.key_talking_points, o.target_audience_pain_points,
+                   o.recommended_outline, o.hook_options,
                    o.recommended_angle, o.recommended_format, o.score_breakdown
             FROM opportunities o
             LEFT JOIN audiences a ON o.segment_id = a.segment_id
@@ -278,6 +299,11 @@ async def download_opportunity_pdf(
         "problem": row.get("problem") or "Underserved audience need",
         "audience_need": row.get("audience_need") or "High interest, missing high-quality guidance",
         "content_gap": row.get("content_gap") or "Absence of clear, comprehensive synthesis",
+        "strategic_rationale": row.get("strategic_rationale") or "",
+        "key_talking_points": _parse_json_list(row.get("key_talking_points")),
+        "target_audience_pain_points": _parse_json_list(row.get("target_audience_pain_points")),
+        "recommended_outline": _parse_json_list(row.get("recommended_outline")),
+        "hook_options": _parse_json_list(row.get("hook_options")),
         "recommended_angle": row.get("recommended_angle") or "Practical, actionable guide with data",
         "recommended_format": row.get("recommended_format") or "Explainer Article / Video Script",
         "score_breakdown": _parse_dict(row.get("score_breakdown")),

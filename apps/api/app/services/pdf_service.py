@@ -249,11 +249,11 @@ class PDFService:
         
         if sb:
             sb_items = [
-                ("Trend Momentum", sb.get("trend_momentum")),
-                ("Freshness & Timing", sb.get("freshness")),
-                ("Audience Demand", sb.get("audience_demand")),
-                ("Content Gap Void", sb.get("content_gap")),
-                ("Corroboration Confidence", sb.get("corroboration"))
+                ("Search Velocity", sb.get("demand_volume") or sb.get("trend_momentum")),
+                ("Content Gap Void", sb.get("competition_gap") or sb.get("content_gap")),
+                ("Audience Urgency", sb.get("audience_fit") or sb.get("audience_demand")),
+                ("Timing & Freshness", sb.get("freshness")),
+                ("Corroboration", sb.get("corroboration"))
             ]
             valid_sb = [(k, v) for k, v in sb_items if v is not None]
             if valid_sb:
@@ -275,11 +275,17 @@ class PDFService:
                     ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                 ]))
                 story.append(sb_table)
-                story.append(Spacer(1, 12))
+                story.append(Spacer(1, 10))
 
-        # 4. Strategic Problem & Content Gap Analysis
+        # 4. Strategic Rationale & Market Context
+        strat_rationale = data.get("strategic_rationale")
+        if strat_rationale:
+            story.append(Paragraph("STRATEGIC CONTEXT & MARKET CATALYST", style_section_heading))
+            story.append(Paragraph(strat_rationale, style_body))
+            story.append(Spacer(1, 8))
+
+        # 5. Strategic Problem & Content Gap Analysis
         story.append(Paragraph("STRATEGIC GAP & MARKET OPPORTUNITY", style_section_heading))
-        
         strat_rows = [
             [
                 Paragraph("<b>The Core Problem:</b>", style_body_bold),
@@ -302,58 +308,132 @@ class PDFService:
             ('LINEBELOW', (0, 0), (-1, -1), 0.5, COLOR_BORDER),
         ]))
         story.append(strat_table)
-        story.append(Spacer(1, 14))
+        story.append(Spacer(1, 10))
 
-        # 5. Target Audience Profile & Ethnography
-        story.append(Paragraph("TARGET AUDIENCE PROFILE & BEHAVIOR", style_section_heading))
-        
-        aud_label = data.get("audience_label") or "Identified Audience Segment"
-        aud_desc = data.get("audience_description") or "Target persona identified through contextual search volume and civic interest."
-        
-        story.append(Paragraph(f"<b>Segment:</b> {aud_label}", style_body_bold))
-        story.append(Paragraph(f"<i>{aud_desc}</i>", style_body))
-        story.append(Spacer(1, 6))
-
-        def _parse_list(val: Any) -> List[str]:
+        # Helper to parse lists/dicts safely
+        def _parse_list(val: Any) -> List[Any]:
             if isinstance(val, str):
                 try:
                     val = json.loads(val)
                 except Exception:
                     val = [val]
             if isinstance(val, list):
-                return [str(x) for x in val if str(x).strip()]
+                return val
             return []
 
-        needs_list = _parse_list(data.get("audience_needs") or data.get("needs"))
-        questions_list = _parse_list(data.get("audience_questions") or data.get("questions"))
-        concerns_list = _parse_list(data.get("audience_concerns") or data.get("concerns"))
+        # 6. Key Strategic Talking Points & Narrative Pillars
+        talking_points = _parse_list(data.get("key_talking_points"))
+        if talking_points:
+            story.append(Paragraph("KEY EDITORIAL TALKING POINTS & PILLARS", style_section_heading))
+            tp_blocks = []
+            for tp in talking_points:
+                tp_blocks.append(Paragraph(f"• <b>{tp}</b>", style_bullet))
+            story.append(KeepTogether(tp_blocks))
+            story.append(Spacer(1, 8))
 
-        # Build Audience 3-column analysis or stacked breakdown
+        # 7. Target Audience Profile & Friction
+        story.append(Paragraph("TARGET AUDIENCE PROFILE & BEHAVIOR", style_section_heading))
+        aud_label = data.get("audience_label") or "Identified Audience Segment"
+        aud_desc = data.get("audience_description") or "Target persona identified through contextual search volume and civic interest."
+        story.append(Paragraph(f"<b>Segment:</b> {aud_label}", style_body_bold))
+        if aud_desc:
+            story.append(Paragraph(f"<i>{aud_desc}</i>", style_body))
+        story.append(Spacer(1, 4))
+
+        needs_list = [str(x) for x in _parse_list(data.get("audience_needs") or data.get("needs")) if str(x).strip()]
+        questions_list = [str(x) for x in _parse_list(data.get("audience_questions") or data.get("questions")) if str(x).strip()]
+        concerns_list = [str(x) for x in _parse_list(data.get("target_audience_pain_points") or data.get("audience_concerns") or data.get("concerns")) if str(x).strip()]
+
         aud_blocks = []
-        
         if needs_list:
             aud_blocks.append(Paragraph("<b>Primary Needs & Desires:</b>", style_body_bold))
-            for item in needs_list:
+            for item in needs_list[:4]:
                 aud_blocks.append(Paragraph(f"• {item}", style_bullet))
-            aud_blocks.append(Spacer(1, 4))
+            aud_blocks.append(Spacer(1, 3))
             
         if questions_list:
             aud_blocks.append(Paragraph("<b>Top Questions Being Asked:</b>", style_body_bold))
-            for item in questions_list:
+            for item in questions_list[:4]:
                 aud_blocks.append(Paragraph(f"• <i>\"{item}\"</i>", style_bullet))
-            aud_blocks.append(Spacer(1, 4))
+            aud_blocks.append(Spacer(1, 3))
             
         if concerns_list:
-            aud_blocks.append(Paragraph("<b>Key Friction Points & Concerns:</b>", style_body_bold))
-            for item in concerns_list:
+            aud_blocks.append(Paragraph("<b>Key Friction Points & User Hesitations:</b>", style_body_bold))
+            for item in concerns_list[:4]:
                 aud_blocks.append(Paragraph(f"• {item}", style_bullet))
-            aud_blocks.append(Spacer(1, 4))
+            aud_blocks.append(Spacer(1, 3))
 
         if aud_blocks:
             story.append(KeepTogether(aud_blocks))
         story.append(Spacer(1, 10))
 
-        # 6. Editorial Action Plan & Studio Handoff
+        # 8. Recommended Content Outline
+        outline = _parse_list(data.get("recommended_outline"))
+        if outline:
+            story.append(Paragraph("RECOMMENDED CONTENT OUTLINE & STRUCTURE", style_section_heading))
+            outline_rows = [
+                [
+                    Paragraph("<b>SECTION</b>", style_callout_label),
+                    Paragraph("<b>CORE TAKEAWAY & MESSAGE</b>", style_callout_label),
+                    Paragraph("<b>SUGGESTED VISUAL / ASSET</b>", style_callout_label)
+                ]
+            ]
+            for sec in outline:
+                if isinstance(sec, dict):
+                    title_sec = sec.get("section_title") or "Section"
+                    takeaway = sec.get("key_takeaway") or ""
+                    visual = sec.get("suggested_visual_or_element") or "Explainer Graphic"
+                    outline_rows.append([
+                        Paragraph(f"<b>{title_sec}</b>", style_body_bold),
+                        Paragraph(takeaway, style_body),
+                        Paragraph(f"<i>{visual}</i>", ParagraphStyle("VisualNote", parent=style_body, fontSize=8.5, textColor=COLOR_ACCENT_BLUE))
+                    ])
+            if len(outline_rows) > 1:
+                outline_table = Table(outline_rows, colWidths=[140, 260, 140])
+                outline_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), COLOR_BG_LIGHT),
+                    ('LINEBELOW', (0, 0), (-1, -1), 0.5, COLOR_BORDER),
+                    ('TOPPADDING', (0, 0), (-1, -1), 5),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ]))
+                story.append(KeepTogether([outline_table]))
+                story.append(Spacer(1, 10))
+
+        # 9. Hook Options
+        hooks = _parse_list(data.get("hook_options"))
+        if hooks:
+            story.append(Paragraph("SCROLL-STOPPING HOOK OPTIONS", style_section_heading))
+            hook_rows = [
+                [
+                    Paragraph("<b>HOOK TYPE</b>", style_callout_label),
+                    Paragraph("<b>HEADLINE / OPENING HOOK</b>", style_callout_label),
+                    Paragraph("<b>STRATEGIC RATIONALE</b>", style_callout_label)
+                ]
+            ]
+            for h in hooks:
+                if isinstance(h, dict):
+                    htype = h.get("hook_type") or "Editorial Hook"
+                    headline = h.get("headline") or ""
+                    rationale = h.get("rationale") or ""
+                    hook_rows.append([
+                        Paragraph(f"<b>{htype}</b>", style_body_bold),
+                        Paragraph(f"<i>\"{headline}\"</i>", ParagraphStyle("HookText", parent=style_body, fontName="Helvetica-Bold", textColor=COLOR_PRIMARY_DARK)),
+                        Paragraph(rationale, style_body)
+                    ])
+            if len(hook_rows) > 1:
+                hook_table = Table(hook_rows, colWidths=[130, 240, 170])
+                hook_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), COLOR_BG_CYAN),
+                    ('LINEBELOW', (0, 0), (-1, -1), 0.5, COLOR_BORDER),
+                    ('TOPPADDING', (0, 0), (-1, -1), 5),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ]))
+                story.append(KeepTogether([hook_table]))
+                story.append(Spacer(1, 10))
+
+        # 10. Editorial Action Plan & Studio Handoff
         action_box = [
             [
                 Paragraph("<b>ACTIONABLE PRODUCTION BLUEPRINT</b>", style_callout_label)
@@ -364,7 +444,7 @@ class PDFService:
                     f"<b>2. Content Structure:</b> Address all top audience questions directly with verifiable evidence.<br/>"
                     f"<b>3. Distribution Formats:</b> Prioritize <b>{data.get('recommended_format', 'Long-form guide')}</b> "
                     f"supplemented by modular infographic cards for social distribution.<br/>"
-                    f"<b>4. Ready for Phase 5 Generation:</b> Pass this brief to your editorial generation pipeline to draft full scripts, articles, and briefs.",
+                    f"<b>4. Staged for Content Studio:</b> When loaded into Content Studio, this brief auto-generates high-converting multi-platform concepts, scripts, and visuals.",
                     style_body
                 )
             ]
@@ -384,3 +464,4 @@ class PDFService:
         doc.build(story, onFirstPage=_draw_page_decorations, onLaterPages=_draw_page_decorations)
         
         return buffer.getvalue()
+

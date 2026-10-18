@@ -18,6 +18,7 @@ class InvestigationRequest(BaseModel):
     topic: str
     region: str = "IN"
     related_topics: List[str] = []
+    trend_id: Optional[str] = None
 
 class InvestigationSummary(BaseModel):
     investigation_id: str
@@ -69,7 +70,10 @@ async def run_investigation_task(investigation_id: str, request: InvestigationRe
     user_id_str = str(getattr(user, "user_id", getattr(user, "id", "dev_user")))
     workspace_id_str = str(getattr(user, "workspace_id", "workspace_dev"))
 
-    # 1. Update status to running
+    # 1. Update status to running and retrieve trend_breakdown if related_topics is empty
+    related_topics = list(request.related_topics) if request.related_topics else []
+    trend_id_val = request.trend_id
+
     async with AsyncSessionLocal() as session:
         await session.execute(
             text("""
@@ -83,16 +87,38 @@ async def run_investigation_task(investigation_id: str, request: InvestigationRe
             text("UPDATE trends SET status = 'investigating' WHERE LOWER(topic) = LOWER(:t)"),
             {"t": request.topic}
         )
+
+        if not related_topics or not trend_id_val:
+            query = text("""
+                SELECT trend_id, trend_breakdown FROM trends 
+                WHERE LOWER(topic) = LOWER(:t) 
+                ORDER BY updated_at DESC LIMIT 1
+            """)
+            result = await session.execute(query, {"t": request.topic})
+            row = result.fetchone()
+            if row:
+                if not trend_id_val and row[0]:
+                    trend_id_val = str(row[0])
+                if not related_topics and row[1]:
+                    raw_bd = row[1]
+                    if isinstance(raw_bd, str):
+                        try:
+                            raw_bd = json.loads(raw_bd)
+                        except Exception:
+                            raw_bd = []
+                    if isinstance(raw_bd, list):
+                        related_topics = [str(x).strip() for x in raw_bd if x and str(x).strip()]
+
         await session.commit()
 
     initial_state = {
         "investigation_id": investigation_id,
         "workspace_id": workspace_id_str,
         "user_id": user_id_str,
-        "trend_id": f"trend_{uuid.uuid4().hex[:8]}",
+        "trend_id": trend_id_val or f"trend_{uuid.uuid4().hex[:8]}",
         "topic": request.topic,
         "region": request.region,
-        "related_topics": request.related_topics,
+        "related_topics": related_topics,
         "trend_history": [],
         "research_plan": {},
         "social_evidence": [],
@@ -344,3 +370,52 @@ async def retry_investigation(
         "status": "retrying",
         "investigation_id": investigation_id
     }
+
+
+@router.delete("/{investigation_id}")
+async def delete_investigation(
+    investigation_id: str,
+    db: AsyncSession = Depends(get_postgres_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Deletes an investigation, its evidence, and associated opportunities."""
+    res = await db.execute(
+        text("SELECT topic FROM investigations WHERE investigation_id = :iid"),
+        {"iid": investigation_id}
+    )
+    row = res.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Investigation not found")
+    topic = row[0]
+
+    # Delete opportunities created by this investigation
+    await db.execute(
+        text("DELETE FROM opportunities WHERE investigation_id = :iid"),
+        {"iid": investigation_id}
+    )
+    # Delete evidence
+    await db.execute(
+        text("DELETE FROM investigation_evidence WHERE investigation_id = :iid"),
+        {"iid": investigation_id}
+    )
+    # Delete the investigation record
+    await db.execute(
+        text("DELETE FROM investigations WHERE investigation_id = :iid"),
+        {"iid": investigation_id}
+    )
+    # Reset trends status back to qualified/candidate if there are no other active investigations for this topic
+    remaining = await db.execute(
+        text("SELECT COUNT(*) FROM investigations WHERE LOWER(topic) = LOWER(:t) AND status != 'failed'"),
+        {"t": topic}
+    )
+    if remaining.scalar() == 0:
+        await db.execute(
+            text("""
+                UPDATE trends 
+                SET status = CASE WHEN qualification_score >= 0.7 THEN 'qualified' ELSE 'candidate' END
+                WHERE LOWER(topic) = LOWER(:t)
+            """),
+            {"t": topic}
+        )
+    await db.commit()
+    return {"message": f"Investigation {investigation_id} for '{topic}' deleted successfully."}

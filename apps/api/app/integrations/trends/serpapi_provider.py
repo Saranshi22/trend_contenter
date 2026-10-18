@@ -140,11 +140,30 @@ class SerpApiTrendsProvider(TrendProvider):
             primary_category = categories_raw
             categories.append({"name": categories_raw})
 
-        # Related terms in trend_breakdown
-        breakdown_raw = entry.get("trend_breakdown")
+        # Related search terms from Google Trends (trend_breakdown, search_queries, related_queries)
         trend_breakdown: List[str] = []
-        if isinstance(breakdown_raw, list):
-            trend_breakdown = [str(term).strip() for term in breakdown_raw if term]
+        raw_candidates: List[Any] = []
+        for key in ("trend_breakdown", "search_queries", "related_queries", "related_searches"):
+            val = entry.get(key)
+            if isinstance(val, list):
+                raw_candidates.extend(val)
+            elif isinstance(val, dict):
+                for subkey in ("top", "rising", "queries"):
+                    sub_val = val.get(subkey)
+                    if isinstance(sub_val, list):
+                        raw_candidates.extend(sub_val)
+
+        for term in raw_candidates:
+            if isinstance(term, str):
+                cleaned = term.strip()
+                if cleaned and cleaned not in trend_breakdown and cleaned.lower() != query.lower():
+                    trend_breakdown.append(cleaned)
+            elif isinstance(term, dict):
+                query_str = term.get("query") or term.get("value") or term.get("name") or term.get("title")
+                if query_str and isinstance(query_str, str):
+                    cleaned = query_str.strip()
+                    if cleaned and cleaned not in trend_breakdown and cleaned.lower() != query.lower():
+                        trend_breakdown.append(cleaned)
 
         # Source links
         source_links: Dict[str, str] = {}

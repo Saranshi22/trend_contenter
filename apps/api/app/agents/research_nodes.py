@@ -20,6 +20,8 @@ from ..integrations.video.youtube_data_api import YouTubeDataApiProvider
 async def research_social(state: Dict[str, Any]) -> Dict[str, Any]:
     """LangGraph node to collect social research evidence across platforms via SocialCrawl."""
     topic = state.get("topic", "")
+    related = state.get("related_topics", []) or []
+    anchor = related[0].strip() if related else ""
     plan = state.get("research_plan", {})
     queries = plan.get("social_queries", []) or [topic]
     inv_id = state.get("investigation_id", "")
@@ -40,7 +42,10 @@ async def research_social(state: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     # Bounded query execution: run primary search query (or up to 2 queries) to strictly control credits & latency
-    for q in queries[:2]:
+    for raw_q in queries[:2]:
+        q = raw_q.strip()
+        if anchor and q.lower() == topic.strip().lower() and anchor.lower() not in q.lower():
+            q = f"{q} {anchor}"
         try:
             items = await provider.search(q, region=region, limit=10)
             for item in items:
@@ -82,6 +87,8 @@ async def research_social(state: Dict[str, Any]) -> Dict[str, Any]:
 async def research_web(state: Dict[str, Any]) -> Dict[str, Any]:
     """LangGraph node to collect web & news search evidence."""
     topic = state.get("topic", "")
+    related = state.get("related_topics", []) or []
+    anchor = related[0].strip() if related else ""
     plan = state.get("research_plan", {})
     queries = plan.get("web_queries", []) or [topic]
     inv_id = state.get("investigation_id", "")
@@ -91,7 +98,10 @@ async def research_web(state: Dict[str, Any]) -> Dict[str, Any]:
     source_status = "success"
     err_list = []
 
-    for q in queries[:3]:
+    for raw_q in queries[:3]:
+        q = raw_q.strip()
+        if anchor and q.lower() == topic.strip().lower() and anchor.lower() not in q.lower():
+            q = f"{q} {anchor}"
         try:
             items = await provider.search(q, recency_days=30, limit=5)
             for item in items:
@@ -115,8 +125,14 @@ async def research_web(state: Dict[str, Any]) -> Dict[str, Any]:
 async def monitor_llm(state: Dict[str, Any]) -> Dict[str, Any]:
     """LangGraph node to probe AI models, monitor responses, and analyze consensus vs voids."""
     topic = state.get("topic", "")
+    related = state.get("related_topics", []) or []
+    anchor = related[0].strip() if related else ""
     plan = state.get("research_plan", {})
-    probes = plan.get("llm_probes", []) or [f"What is {topic}?", f"Why is {topic} trending?"]
+    default_probes = [
+        f"What is happening with {topic} ({anchor})?" if anchor else f"What is {topic}?",
+        f"Why is {topic} trending in relation to {anchor}?" if anchor else f"Why is {topic} trending?"
+    ]
+    probes = plan.get("llm_probes", []) or default_probes
     inv_id = state.get("investigation_id", "")
 
     provider = EngineLLMMonitoringProvider()
@@ -226,6 +242,8 @@ async def monitor_llm(state: Dict[str, Any]) -> Dict[str, Any]:
 async def research_youtube(state: Dict[str, Any]) -> Dict[str, Any]:
     """LangGraph node to collect YouTube video intelligence, metadata, and audience comments."""
     topic = state.get("topic", "")
+    related = state.get("related_topics", []) or []
+    anchor = related[0].strip() if related else ""
     plan = state.get("research_plan", {})
     queries = plan.get("youtube_queries", []) or [topic]
     inv_id = state.get("investigation_id", "")
@@ -248,7 +266,9 @@ async def research_youtube(state: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     # Bounded retrieval: execute primary query (bounded search quota = 100 units)
-    primary_query = queries[0] if queries else topic
+    primary_query = (queries[0] if queries else topic).strip()
+    if anchor and primary_query.lower() == topic.strip().lower() and anchor.lower() not in primary_query.lower():
+        primary_query = f"{primary_query} {anchor}"
     try:
         result = await provider.investigate_trend(
             topic=primary_query,

@@ -18,7 +18,8 @@ import {
   IconEye,
   IconThumbsUp,
   IconCheck,
-  IconExternalLink
+  IconExternalLink,
+  IconTrash
 } from '../components/Icons';
 
 interface InvestigationsPageProps {
@@ -49,6 +50,7 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
   const [evidenceSearch, setEvidenceSearch] = useState('');
   const [customTopic, setCustomTopic] = useState('');
   const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (selectedInvestigationId !== undefined) {
@@ -98,6 +100,30 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
     }
   };
 
+  const handleDelete = async (invId: string, topicName: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete the investigation for "${topicName}"? This will remove its evidence and generated opportunities.`)) {
+      return;
+    }
+    setDeletingId(invId);
+    try {
+      const res = await fetch(`${API_BASE}/investigations/${invId}`, { method: 'DELETE' });
+      if (res.ok) {
+        if (selectedInvId === invId) {
+          handleSelectInvestigation(null);
+        }
+        onRefresh();
+      } else {
+        alert('Failed to delete investigation.');
+      }
+    } catch (err) {
+      console.error('Delete failed:', err);
+      alert('Network error while deleting investigation.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   if (selectedInvId && loadingReport) {
     return (
       <div className="page-container animate-fade-in" style={{ padding: '60px 0', textAlign: 'center' }}>
@@ -124,13 +150,23 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
             <IconArrowRight size={13} style={{ transform: 'rotate(180deg)' }} />
             <span>Back to Investigations List</span>
           </button>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <span className={`badge ${status === 'complete' ? 'badge-emerald' : status === 'failed' ? 'badge-amber' : 'badge-cyan'}`}>
               {status.toUpperCase()}
             </span>
             <span className="badge badge-cyan">
               ID: {selectedInvId}
             </span>
+            <button
+              className="btn-outline"
+              title="Delete Investigation"
+              onClick={() => handleDelete(selectedInvId, topic)}
+              disabled={deletingId === selectedInvId}
+              style={{ borderColor: 'rgba(239, 68, 68, 0.4)', color: '#EF4444', padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px' }}
+            >
+              <IconTrash size={14} color="#EF4444" />
+              <span>{deletingId === selectedInvId ? 'Deleting...' : 'Delete'}</span>
+            </button>
           </div>
         </div>
 
@@ -277,20 +313,50 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
                 <h3 style={{ fontSize: '1.15rem', marginBottom: '16px', color: 'var(--text-primary)', fontWeight: 600 }}>
                   Recommended Editorial Opportunities
                 </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
                   {opportunities.map((opp: any, idx: number) => (
-                    <div key={idx} style={{ padding: '18px', background: '#FFFFFF', borderRadius: '10px', border: '1px solid var(--border-subtle)', boxShadow: 'var(--shadow-sm)' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                        <span className="badge badge-cyan">{opp.audience_label || 'Target Audience'}</span>
-                        <span style={{ color: 'var(--status-success)', fontWeight: 700 }}>
-                          {Math.round((opp.score || 0.85) * 100)} / 100
-                        </span>
+                    <div 
+                      key={idx} 
+                      style={{ 
+                        padding: '18px', 
+                        background: '#FFFFFF', 
+                        borderRadius: '10px', 
+                        border: '1px solid var(--border-subtle)', 
+                        boxShadow: 'var(--shadow-sm)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        minWidth: 0,
+                        overflow: 'hidden'
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '10px', minWidth: 0 }}>
+                          <span 
+                            className="badge badge-cyan"
+                            style={{ 
+                              maxWidth: 'calc(100% - 85px)', 
+                              overflow: 'hidden', 
+                              textOverflow: 'ellipsis', 
+                              whiteSpace: 'nowrap', 
+                              display: 'inline-block' 
+                            }}
+                            title={opp.audience_label || 'Target Audience'}
+                          >
+                            {opp.audience_label || 'Target Audience'}
+                          </span>
+                          <span style={{ color: 'var(--status-success)', fontWeight: 700, fontSize: '0.88rem', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                            {Math.round((opp.score || 0.85) * 100)} / 100
+                          </span>
+                        </div>
+                        <h4 style={{ color: 'var(--text-primary)', fontSize: '1.05rem', marginBottom: '8px', fontWeight: 600, wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                          {opp.title}
+                        </h4>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '16px', lineHeight: '1.5', wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                          {opp.content_gap}
+                        </p>
                       </div>
-                      <h4 style={{ color: 'var(--text-primary)', fontSize: '1.05rem', marginBottom: '8px', fontWeight: 600 }}>{opp.title}</h4>
-                      <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '14px', lineHeight: '1.5' }}>
-                        {opp.content_gap}
-                      </p>
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
                         <button 
                           className="btn-outline" 
                           style={{ flex: 1, padding: '8px 12px', fontSize: '0.85rem' }}
@@ -731,6 +797,15 @@ export const InvestigationsPage: React.FC<InvestigationsPageProps> = ({
                     <span>Running Agents...</span>
                   </span>
                 )}
+                <button
+                  className="btn-outline"
+                  title="Delete Investigation"
+                  onClick={(e) => handleDelete(inv.investigation_id, inv.topic, e)}
+                  disabled={deletingId === inv.investigation_id}
+                  style={{ borderColor: 'rgba(239, 68, 68, 0.3)', color: '#EF4444', padding: '9px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '5px' }}
+                >
+                  <IconTrash size={14} color="#EF4444" />
+                </button>
               </div>
             </div>
           );

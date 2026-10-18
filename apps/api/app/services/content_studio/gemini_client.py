@@ -23,27 +23,36 @@ def get_gemini_client(
                   or settings.LLM_GATEWAY_BASE_URL).
       - headers: 'Authorization: Bearer <token>' containing the gateway token or API key.
     """
-    token = (
+    gemini_key = (
         api_key
         or api_key_override
         or settings.GEMINI_API_KEY
-        or settings.LLM_GATEWAY_TOKEN
         or os.environ.get("GEMINI_API_KEY")
+        or ""
+    ).strip()
+
+    explicit_base_url = (base_url or base_url_override or settings.GEMINI_BASE_URL or "").strip()
+
+    # When direct GEMINI_API_KEY is provided and no explicit base_url override is given,
+    # talk directly to Google AI Studio API without routing through the LLM gateway.
+    if gemini_key and not explicit_base_url:
+        logger.info("Configuring direct Google AI Studio Gemini client using GEMINI_API_KEY.")
+        return genai.Client(api_key=gemini_key)
+
+    token = gemini_key or (
+        settings.LLM_GATEWAY_TOKEN
         or os.environ.get("LLM_GATEWAY_TOKEN")
         or ""
     ).strip()
 
     target_base_url = (
-        base_url
-        or base_url_override
-        or settings.GEMINI_BASE_URL
+        explicit_base_url
         or settings.LLM_GATEWAY_BASE_URL
-        or os.environ.get("GEMINI_BASE_URL")
         or os.environ.get("LLM_GATEWAY_BASE_URL")
         or ""
     ).strip()
 
-    if not token and not base_url:
+    if not token and not target_base_url:
         raise ValueError(
             "Gemini API Key or Gateway Token is missing. Please set GEMINI_API_KEY (or LLM_GATEWAY_TOKEN) in your environment or .env file."
         )

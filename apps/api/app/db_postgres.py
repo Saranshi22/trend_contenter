@@ -117,6 +117,11 @@ async def init_db():
         "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS investigation_id VARCHAR",
         "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS evidence_ids JSONB",
         "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'suggested'",
+        "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS strategic_rationale TEXT",
+        "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS key_talking_points JSONB",
+        "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS target_audience_pain_points JSONB",
+        "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS recommended_outline JSONB",
+        "ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS hook_options JSONB",
         """
         CREATE TABLE IF NOT EXISTS investigations (
             investigation_id VARCHAR PRIMARY KEY,
@@ -211,7 +216,35 @@ async def init_db():
             web_research_enabled BOOLEAN DEFAULT TRUE,
             updated_at TIMESTAMP DEFAULT NOW()
         )
+        """,
         """
+        CREATE TABLE IF NOT EXISTS campaign_drafts (
+            campaign_id VARCHAR PRIMARY KEY,
+            workspace_id VARCHAR NOT NULL DEFAULT 'workspace_dev',
+            user_id VARCHAR NOT NULL DEFAULT 'dev_user',
+            opportunity_id VARCHAR,
+            title VARCHAR DEFAULT 'Untitled Campaign',
+            current_stage VARCHAR DEFAULT 'brief',
+            brief_data JSONB DEFAULT '{}',
+            concepts_data JSONB DEFAULT '{}',
+            active_concept JSONB,
+            artwork_data JSONB DEFAULT '{}',
+            active_artwork JSONB,
+            curated_assets JSONB DEFAULT '[]',
+            selected_reference JSONB,
+            copy_data JSONB DEFAULT '{}',
+            email_data JSONB DEFAULT '{}',
+            publish_data JSONB DEFAULT '{}',
+            status VARCHAR DEFAULT 'draft',
+            created_at TIMESTAMP DEFAULT NOW(),
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_campaign_drafts_workspace ON campaign_drafts(workspace_id)",
+        "CREATE INDEX IF NOT EXISTS idx_campaign_drafts_opportunity ON campaign_drafts(opportunity_id)",
+        "CREATE INDEX IF NOT EXISTS idx_campaign_drafts_updated ON campaign_drafts(updated_at DESC)",
+        "ALTER TABLE campaign_drafts ADD COLUMN IF NOT EXISTS title VARCHAR DEFAULT 'Untitled Campaign'",
+        "ALTER TABLE campaign_drafts ADD COLUMN IF NOT EXISTS current_stage VARCHAR DEFAULT 'brief'"
     ]
     try:
         async with engine.begin() as conn:
@@ -225,6 +258,21 @@ async def init_db():
             f"Postgres init_db warning: {e}. Container will continue running."
         )
 
-async def get_postgres_session() -> AsyncSession:
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
+
+async def get_postgres_session() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
-        yield session
+        try:
+            yield session
+        finally:
+            await session.close()
+
+@asynccontextmanager
+async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+        finally:
+            await session.close()
+

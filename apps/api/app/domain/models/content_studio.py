@@ -110,7 +110,7 @@ class GenerateVideoRequest(BaseModel):
     prompt: str = Field(..., description="Prompt describing the video action, motion, lighting, and scene")
     image_base64: Optional[str] = Field(None, description="Optional starting image for Image-to-Video generation")
     aspect_ratio: str = Field("16:9", description="Aspect ratio: 16:9, 9:16, 1:1")
-    duration_seconds: int = Field(5, ge=5, le=8, description="Duration in seconds (5-8)")
+    duration_seconds: int = Field(6, ge=4, le=8, description="Duration in seconds (4, 6, or 8)")
     fps: int = Field(24, description="Frame rate: 24 or 30")
     person_generation: Optional[str] = Field(None, description="allow_adult, dont_allow, allow_all")
     negative_prompt: Optional[str] = Field(None, description="Elements to avoid in video")
@@ -199,6 +199,10 @@ class RecommendImagesRequest(BaseModel):
     search_provider: Optional[str] = Field("auto", description="google_cse, serpapi, web, or auto")
     reranker_model: Optional[str] = Field("hybrid", description="gemini, clip, or hybrid")
     safe_search: bool = Field(True)
+    headline: Optional[str] = Field(None, description="Concept headline or title for targeted relevance")
+    topic: Optional[str] = Field(None, description="Campaign subject or trend topic")
+    visual_direction: Optional[str] = Field(None, description="Creative visual direction notes")
+    style: Optional[str] = Field(None, description="Desired visual style preset or entities")
     gemini_api_key: Optional[str] = None
     serpapi_key: Optional[str] = None
     google_cse_key: Optional[str] = None
@@ -223,6 +227,7 @@ class RecommendedImageItem(BaseModel):
 
 class RecommendImagesResponse(BaseModel):
     prompt: str
+    optimized_query: Optional[str] = None
     total_candidates: int
     reranker_model: str
     recommendations: List[RecommendedImageItem]
@@ -339,6 +344,69 @@ class PublishResult(BaseModel):
     url: Optional[str] = None
     message: str
     details: Optional[Dict[str, Any]] = None
+
+
+# ==========================================
+# Persistent Campaign Drafts
+# ==========================================
+
+class CampaignDraft(BaseModel):
+    campaign_id: str = Field(..., description="Stable unique campaign draft identifier")
+    workspace_id: str = Field("workspace_dev", description="Workspace scope")
+    user_id: str = Field("dev_user", description="Owner user ID")
+    opportunity_id: Optional[str] = Field(None, description="Linked opportunity ID if staged")
+    title: str = Field("Untitled Campaign", description="Human-readable campaign title")
+    current_stage: str = Field("brief", description="Current workflow stage: brief, concepts, assets, publish")
+    brief_data: Dict[str, Any] = Field(default_factory=dict, description="Brief inputs, uploaded doc metadata, goals, tone")
+    concepts_data: Optional[Dict[str, Any]] = Field(None, description="Generated concept variants A, B, C")
+    active_concept: Optional[Dict[str, Any]] = Field(None, description="Selected concept variant")
+    artwork_data: Dict[str, Any] = Field(default_factory=dict, description="Generated artwork candidate metadata, prompt, aspect ratio, style")
+    active_artwork: Optional[Dict[str, Any]] = Field(None, description="Selected hero artwork asset reference")
+    curated_assets: List[Dict[str, Any]] = Field(default_factory=list, description="Recommended visual inspiration references")
+    selected_reference: Optional[Dict[str, Any]] = Field(None, description="Selected inspiration aid reference")
+    copy_data: Dict[str, Any] = Field(default_factory=dict, description="Customized social copy (Instagram, Facebook)")
+    email_data: Dict[str, Any] = Field(default_factory=dict, description="Email studio configuration and copy")
+    publish_data: Dict[str, Any] = Field(default_factory=dict, description="Publishing channel selections and history (no secrets)")
+    status: str = Field("draft", description="Draft status: draft, active, archived, published")
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class SaveCampaignDraftRequest(BaseModel):
+    campaign_id: str
+    opportunity_id: Optional[str] = None
+    title: Optional[str] = None
+    current_stage: Optional[str] = "brief"
+    brief_data: Optional[Dict[str, Any]] = None
+    concepts_data: Optional[Dict[str, Any]] = None
+    active_concept: Optional[Dict[str, Any]] = None
+    artwork_data: Optional[Dict[str, Any]] = None
+    active_artwork: Optional[Dict[str, Any]] = None
+    curated_assets: Optional[List[Dict[str, Any]]] = None
+    selected_reference: Optional[Dict[str, Any]] = None
+    copy_data: Optional[Dict[str, Any]] = None
+    email_data: Optional[Dict[str, Any]] = None
+    publish_data: Optional[Dict[str, Any]] = None
+    status: Optional[str] = "draft"
+
+
+class CampaignDraftSummary(BaseModel):
+    campaign_id: str
+    opportunity_id: Optional[str] = None
+    title: str
+    current_stage: str
+    status: str
+    has_concepts: bool = False
+    has_artwork: bool = False
+    has_active_concept: bool = False
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class ListCampaignDraftsResponse(BaseModel):
+    drafts: List[CampaignDraftSummary]
+    total: int
+
 
 
 

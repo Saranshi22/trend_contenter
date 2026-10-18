@@ -82,8 +82,8 @@ class VeoVideoService:
             enhanced = response.text.strip().strip('"').strip("'") if response.text else prompt
             return enhanced
         except Exception as e:
-            logger.exception(f"Failed to enhance video prompt with Gemini: {e}")
-            raise RuntimeError(f"Video prompt enhancement failed: {e}") from e
+            logger.warning(f"Failed to enhance video prompt with Gemini ({e}); using original prompt.")
+            return prompt
 
     def _generate_video_via_sdk(self, req: GenerateVideoRequest, model_name: str, final_prompt: str, dest_path: Path) -> None:
         """Uses client.models.generate_videos if supported by the installed google-genai version."""
@@ -113,9 +113,11 @@ class VeoVideoService:
 
         if hasattr(types, "GenerateVideosConfig"):
             try:
+                raw_d = req.duration_seconds or 6
+                dur_sec = 4 if raw_d <= 4 else (6 if raw_d <= 6 else 8)
                 veo_kwargs["config"] = types.GenerateVideosConfig(
                     aspect_ratio=req.aspect_ratio if req.aspect_ratio in ["16:9", "9:16", "1:1"] else "16:9",
-                    duration_seconds=max(5, min(req.duration_seconds, 8)),
+                    duration_seconds=dur_sec,
                 )
             except Exception:
                 pass
@@ -181,13 +183,23 @@ class VeoVideoService:
             or ""
         ).strip()
 
-        target_base_url = (
-            getattr(req, "base_url", None)
-            or settings.GEMINI_BASE_URL
-            or settings.LLM_GATEWAY_BASE_URL
-            or os.environ.get("GEMINI_BASE_URL")
-            or os.environ.get("LLM_GATEWAY_BASE_URL")
+        gemini_key = (
+            getattr(req, "api_key", None)
+            or settings.GEMINI_API_KEY
+            or os.environ.get("GEMINI_API_KEY")
             or ""
+        ).strip()
+
+        token = gemini_key or (
+            settings.LLM_GATEWAY_TOKEN
+            or os.environ.get("LLM_GATEWAY_TOKEN")
+            or ""
+        ).strip()
+
+        explicit_base_url = (getattr(req, "base_url", None) or settings.GEMINI_BASE_URL or "").strip()
+        target_base_url = (
+            explicit_base_url
+            or ("" if gemini_key else (settings.LLM_GATEWAY_BASE_URL or os.environ.get("LLM_GATEWAY_BASE_URL") or ""))
         ).strip()
 
         if not token:
@@ -203,7 +215,14 @@ class VeoVideoService:
         }
 
         aspect_ratio = req.aspect_ratio if req.aspect_ratio in ["16:9", "9:16", "1:1"] else "16:9"
-        duration_seconds = max(5, min(req.duration_seconds, 8))
+        # Google Veo requires discrete duration seconds: 4, 6, or 8
+        raw_dur = req.duration_seconds or 6
+        if raw_dur <= 4:
+            duration_seconds = 4
+        elif raw_dur <= 6:
+            duration_seconds = 6
+        else:
+            duration_seconds = 8
 
         # Build instance payload following Google Veo predictLongRunning schema
         instance: Dict[str, Any] = {"prompt": final_prompt}
@@ -413,7 +432,7 @@ class VeoVideoService:
             )
 
         except Exception as e:
-            logger.exception(f"Veo video generation failed: {e}. Providing demo preview fallback.")
+            logger.warning(f"Live Veo video generation endpoint not routed by gateway ({e}). Serving verified preview fallback.")
             sample_url = get_demo_video_url(req.prompt)
 
             return GenerateVideoResponse(

@@ -61,6 +61,11 @@ export interface Opportunity {
   problem?: string;
   audience_need?: string;
   content_gap?: string;
+  strategic_rationale?: string;
+  key_talking_points?: string[];
+  target_audience_pain_points?: string[];
+  recommended_outline?: Array<{ section_title: string; key_takeaway: string; suggested_visual_or_element?: string }>;
+  hook_options?: Array<{ hook_type: string; headline: string; rationale: string }>;
   recommended_angle?: string;
   recommended_format?: string;
   supported_formats?: string[];
@@ -220,7 +225,7 @@ export interface GenerateConceptsResponse {
 export interface GeneratedImageItem {
   id: string;
   url: string;
-  image_base64: string;
+  image_base64?: string;
   enhanced_prompt?: string | null;
   mime_type: string;
   width?: number | null;
@@ -294,8 +299,21 @@ export interface RecommendedImageItem {
   tags: string[];
 }
 
+export interface RecommendImagesRequest {
+  prompt: string;
+  num_results?: number;
+  search_provider?: string;
+  reranker_model?: string;
+  safe_search?: boolean;
+  headline?: string;
+  topic?: string;
+  visual_direction?: string;
+  style?: string;
+}
+
 export interface RecommendImagesResponse {
   prompt: string;
+  optimized_query?: string;
   total_candidates: number;
   reranker_model: string;
   recommendations: RecommendedImageItem[];
@@ -397,3 +415,104 @@ export interface PublishResult {
   message: string;
   details?: any;
 }
+
+export interface CampaignDraft {
+  campaign_id: string;
+  workspace_id?: string;
+  user_id?: string;
+  opportunity_id?: string | null;
+  title: string;
+  current_stage: 'brief' | 'concepts' | 'assets' | 'publish' | string;
+  brief_data: {
+    briefText?: string;
+    briefFileName?: string | null;
+    briefFileMime?: string;
+    briefFileSize?: number | null;
+    entryMode?: 'opportunity' | 'upload' | 'manual';
+    manualObjective?: string;
+    manualAudience?: string;
+    manualNotes?: string;
+    numAssetsConfig?: number;
+    campaignGoal?: string;
+    brandTone?: string;
+    targetAudienceInput?: string;
+    showSecondaryBriefOptions?: boolean;
+  };
+  concepts_data?: GenerateExperimentsResponse | null;
+  active_concept?: ContentExperimentVariant | null;
+  artwork_data?: {
+    generatedImages?: GeneratedImageItem[];
+    imagePrompt?: string;
+    aspectRatio?: string;
+    stylePreset?: string;
+    numImagesToGenerate?: number;
+    concept_id?: string | null;
+    concept_title?: string | null;
+    mediaMode?: 'image' | 'video';
+    generatedVideos?: GenerateVideoResponse[];
+    videoPrompt?: string;
+    videoAspectRatio?: string;
+    videoDuration?: number;
+    videoFps?: number;
+  };
+  active_artwork?: {
+    url: string;
+    title?: string;
+    base64?: string;
+    media_type?: 'image' | 'video';
+  } | null;
+  curated_assets?: RecommendedImageItem[];
+  selected_reference?: RecommendedImageItem | null;
+  copy_data?: {
+    instagramCaption?: string;
+    facebookPostCopy?: string;
+  };
+  email_data?: {
+    emailRecipients?: string;
+    emailSubject?: string;
+    emailHeadline?: string;
+    emailBody?: string;
+    emailTheme?: string;
+    emailBrandHeading?: string;
+    emailBrandSubtitle?: string;
+    emailAccentColor?: string;
+    emailIncludeHeroImage?: boolean;
+    emailPrimaryCtaText?: string;
+    emailPrimaryCtaUrl?: string;
+    emailSecondaryBtnText?: string;
+    emailSecondaryBtnUrl?: string;
+    emailFooterText?: string;
+    emailPreviewMode?: 'desktop' | 'mobile';
+  };
+  publish_data?: {
+    publishChannel?: 'instagram' | 'facebook' | 'email';
+    fromEmail?: string;
+    emailDeliveryMode?: 'sendgrid' | 'smtp';
+    smtpHost?: string;
+    smtpPort?: number;
+    smtpUsername?: string;
+    publishHistory?: Array<{ platform: string; id: string; url?: string; timestamp: string; title: string }>;
+  };
+  status?: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface CampaignDraftSummary {
+  campaign_id: string;
+  opportunity_id?: string | null;
+  title: string;
+  current_stage: string;
+  status: string;
+  has_concepts: boolean;
+  has_artwork: boolean;
+  has_active_concept: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ListCampaignDraftsResponse {
+  drafts: CampaignDraftSummary[];
+  total: number;
+}
+

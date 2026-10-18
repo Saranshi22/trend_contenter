@@ -78,9 +78,21 @@ export const AudienceOpportunitiesPage: React.FC<AudienceOpportunitiesPageProps>
             {opportunities.map((opp) => (
               <div key={opp.opportunity_id} className="glass-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                    <span className="badge badge-cyan">{opp.audience_label || `Audience: ${opp.segment_id}`}</span>
-                    <div className="score-display" style={{ '--score': opp.score * 100 } as React.CSSProperties}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', marginBottom: '16px', minWidth: 0 }}>
+                    <span 
+                      className="badge badge-cyan"
+                      style={{ 
+                        maxWidth: 'calc(100% - 70px)', 
+                        overflow: 'hidden', 
+                        textOverflow: 'ellipsis', 
+                        whiteSpace: 'nowrap',
+                        display: 'inline-block' 
+                      }}
+                      title={opp.audience_label || `Audience: ${opp.segment_id}`}
+                    >
+                      {opp.audience_label || `Audience: ${opp.segment_id}`}
+                    </span>
+                    <div className="score-display" style={{ '--score': opp.score * 100, flexShrink: 0 } as React.CSSProperties}>
                       <div className="score-inner">{Math.round(opp.score * 100)}</div>
                     </div>
                   </div>

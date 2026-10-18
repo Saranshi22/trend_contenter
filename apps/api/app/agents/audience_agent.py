@@ -20,18 +20,26 @@ async def discover_audiences(state: InvestigationState) -> dict:
     """Agent node that identifies and labels audience segments."""
     engine = get_llm_engine()
     
+    related_queries = state.get('related_topics', []) or []
+    related_str = ', '.join(related_queries) if related_queries else 'None'
+    topic = state.get('topic', '')
+
     prompt = f"""
     You are an expert audience researcher and ethnographer.
     Analyze the following trend, context, questions, and narratives:
     
-    Topic: {state['topic']}
+    Topic: {topic}
     Region: {state.get('region', 'Global')}
-    Related Search Queries: {', '.join(state.get('related_topics', [])) or 'None'}
+    Google Trends Related Search Queries: {related_str}
     Questions: {state.get('questions', [])}
     Narratives: {state.get('narratives', [])}
     
+    CRITICAL CONTEXT & DISAMBIGUATION MANDATE:
+    Use the 'Google Trends Related Search Queries' ({related_str}) to anchor the domain of this trend.
+    For example: if the topic is 'barcelona' and related searches are 'fc barca', 'barca match', audience segments MUST be football supporters, club analysts, or match viewers — NOT city tourists or vacation travelers.
+    
     Identify 2 to 3 distinct, realistic audience segments who are directly affected by or interested in this specific topic.
-    Give each segment a descriptive, human-readable label (e.g., 'Daily Commuters & East Delhi Residents', 'Protest Organizers & Civil Rights Groups', 'City Administration Watchers').
+    Give each segment a descriptive, human-readable label (e.g., 'Club Supporters & Match Day Fans', 'Tactical & Transfer Analysts').
     """
     
     try:
@@ -42,17 +50,18 @@ async def discover_audiences(state: InvestigationState) -> dict:
         return {"audience_segments": valid_segments}
     except Exception as e:
         print(f"Error in audience discovery: {e}")
-        topic = state.get("topic", "")
+        anchor = related_queries[0].strip() if related_queries else ""
+        context_label = f"{topic} ({anchor})" if anchor and anchor.lower() not in topic.lower() else topic
         norm_ev = state.get("normalized_evidence", [])
         ev_ids = [e.get("evidence_id") for e in norm_ev[:2] if e.get("evidence_id")]
         fallback_segments = [
             {
                 "segment_id": "seg_practitioners",
-                "label": f"{topic} Practitioners & Enthusiasts",
-                "description": f"Individuals actively exploring implementations and news related to {topic}.",
-                "needs": ["Practical tutorials", "Verified updates"],
-                "questions": [f"What are best practices for {topic}?"],
-                "concerns": ["Complexity and inconsistent information"],
+                "label": f"{context_label} Followers & Enthusiasts",
+                "description": f"Individuals actively following updates, discussions, and events related to {context_label}.",
+                "needs": ["Accurate updates", "Contextual breakdown"],
+                "questions": [f"What are key developments regarding {context_label}?"],
+                "concerns": ["Unverified rumors and confusing coverage"],
                 "evidence_ids": ev_ids
             }
         ]

@@ -97,6 +97,7 @@ async def list_trends(
 
 @router.post("/poll", response_model=PollTrendsResponse)
 async def poll_trends_now(
+    background_tasks: BackgroundTasks,
     region: str = Query("IN", description="Target region (default: IN)"),
     hours: int = Query(4, ge=1, le=48),
     only_active: bool = Query(True),
@@ -107,6 +108,7 @@ async def poll_trends_now(
     """
     Triggers an immediate poll of the configured trend provider (SerpApi).
     Normalizes results, persists snapshots to PostgreSQL, and qualifies trends.
+    Automatically evaluates monitored watchlists and dispatches investigations.
     """
     provider = get_trend_provider()
     repo = PostgresTrendRepository(db)
@@ -139,6 +141,18 @@ async def poll_trends_now(
             qualified_count += 1
         else:
             candidate_count += 1
+
+    # 3. Automatic Watchlist Evaluation & Auto-Investigation Trigger
+    try:
+        from ...services.watchlist_matcher import evaluate_watchlist_triggers
+        await evaluate_watchlist_triggers(
+            db=db,
+            user=current_user,
+            background_tasks=background_tasks
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Watchlist evaluation error: {e}")
 
     return PollTrendsResponse(
         total_fetched=len(persisted_items),

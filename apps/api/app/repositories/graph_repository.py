@@ -187,14 +187,20 @@ class PostgresGraphWriter:
 
             sb = json.dumps(opp.get("score_breakdown") or {})
             ev_ids = json.dumps(opp.get("evidence_ids") or [])
+            ktp = json.dumps(opp.get("key_talking_points") or [])
+            app = json.dumps(opp.get("target_audience_pain_points") or [])
+            ro = json.dumps(opp.get("recommended_outline") or [])
+            ho = json.dumps(opp.get("hook_options") or [])
             await self.session.execute(
                 text("""
                     INSERT INTO opportunities (
                         opportunity_id, investigation_id, segment_id, title, problem, audience_need,
-                        content_gap, recommended_angle, recommended_format, score, score_breakdown, evidence_ids, status
+                        content_gap, recommended_angle, recommended_format, score, score_breakdown, evidence_ids, status,
+                        strategic_rationale, key_talking_points, target_audience_pain_points, recommended_outline, hook_options
                     ) VALUES (
                         :oid, :iid, :aid, :t, :prob, :need,
-                        :gap, :angle, :fmt, :s, :sb, :ev_ids, 'suggested'
+                        :gap, :angle, :fmt, :s, :sb, :ev_ids, 'suggested',
+                        :strat, :ktp, :app, :ro, :ho
                     ) ON CONFLICT (opportunity_id) DO UPDATE SET
                         investigation_id = EXCLUDED.investigation_id,
                         title = EXCLUDED.title,
@@ -205,7 +211,12 @@ class PostgresGraphWriter:
                         recommended_format = EXCLUDED.recommended_format,
                         score = EXCLUDED.score,
                         score_breakdown = EXCLUDED.score_breakdown,
-                        evidence_ids = EXCLUDED.evidence_ids
+                        evidence_ids = EXCLUDED.evidence_ids,
+                        strategic_rationale = EXCLUDED.strategic_rationale,
+                        key_talking_points = EXCLUDED.key_talking_points,
+                        target_audience_pain_points = EXCLUDED.target_audience_pain_points,
+                        recommended_outline = EXCLUDED.recommended_outline,
+                        hook_options = EXCLUDED.hook_options
                 """),
                 {
                     "oid": o_id,
@@ -219,7 +230,12 @@ class PostgresGraphWriter:
                     "fmt": opp.get("recommended_format", "Long-form Guide"),
                     "s": float(opp.get("score") or 0.85),
                     "sb": sb,
-                    "ev_ids": ev_ids
+                    "ev_ids": ev_ids,
+                    "strat": opp.get("strategic_rationale") or "",
+                    "ktp": ktp,
+                    "app": app,
+                    "ro": ro,
+                    "ho": ho
                 }
             )
 

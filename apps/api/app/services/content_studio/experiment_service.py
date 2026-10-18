@@ -16,6 +16,10 @@ from ...domain.models.content_studio import (
 )
 from .image_utils import clean_base64_string
 
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+from ...db_postgres import AsyncSessionLocal, get_db_session
+
 logger = logging.getLogger(__name__)
 
 class ContentExperimentService:
@@ -25,7 +29,11 @@ class ContentExperimentService:
     def _get_client(self, api_key_override: Optional[str] = None, base_url_override: Optional[str] = None) -> genai.Client:
         return get_gemini_client(api_key_override=api_key_override, base_url_override=base_url_override)
 
-    async def generate_experiments(self, req: GenerateExperimentsRequest) -> GenerateExperimentsResponse:
+    async def generate_experiments(
+        self,
+        req: GenerateExperimentsRequest,
+        session: Optional[AsyncSession] = None,
+    ) -> GenerateExperimentsResponse:
         """
         Synthesizes an editorial brief or trend opportunity into 3 distinct, high-impact
         Campaign Experiment Variants (Trend Jacker, Educational Solution, Emotive Story)
@@ -44,28 +52,49 @@ class ContentExperimentService:
         opp_gap = ""
 
         if req.opportunity_id and not brief_context:
+            async def _fetch_opportunity_record(db_s: AsyncSession):
+                res = await db_s.execute(
+                    text("""
+                        SELECT o.opportunity_id, o.title, o.content_gap,
+                               COALESCE(a.label, 'Target Demographic') as audience_label,
+                               o.recommended_angle, o.problem, o.strategic_rationale, o.key_talking_points
+                        FROM opportunities o
+                        LEFT JOIN audiences a ON o.segment_id = a.segment_id
+                        WHERE o.opportunity_id = :id
+                    """),
+                    {"id": req.opportunity_id}
+                )
+                return res.mappings().first()
+
+            row = None
             try:
-                from ...db_postgres import get_db_session
-                from sqlalchemy import text
-                async with get_db_session() as session:
-                    res = await session.execute(
-                        text("SELECT title, content_gap, audience_label, recommended_angle, problem FROM opportunities WHERE opportunity_id = :id"),
-                        {"id": req.opportunity_id}
-                    )
-                    row = res.fetchone()
-                    if row:
-                        opp_title = row.title or ""
-                        opp_gap = row.content_gap or row.problem or ""
-                        opp_audience = row.audience_label or opp_audience
-                        rec_angle = row.recommended_angle or ""
-                        brief_context = (
-                            f"Opportunity Title: {opp_title}\n"
-                            f"Target Audience: {opp_audience}\n"
-                            f"Content Gap: {opp_gap}\n"
-                            f"Recommended Editorial Angle: {rec_angle}"
-                        )
+                if session is not None:
+                    row = await _fetch_opportunity_record(session)
+                else:
+                    async with AsyncSessionLocal() as db_s:
+                        row = await _fetch_opportunity_record(db_s)
             except Exception as e:
-                logger.warning(f"Could not load opportunity from postgres: {e}")
+                logger.exception(f"Database error loading opportunity '{req.opportunity_id}': {e}")
+                if not req.brief_file_base64 and not brief_context:
+                    raise RuntimeError(f"Database error loading opportunity '{req.opportunity_id}': {e}") from e
+
+            if row:
+                opp_title = row.get("title") or ""
+                opp_gap = row.get("content_gap") or row.get("problem") or ""
+                opp_audience = row.get("audience_label") or opp_audience
+                rec_angle = row.get("recommended_angle") or ""
+                strat_rationale = row.get("strategic_rationale") or ""
+                brief_context = (
+                    f"Opportunity Title: {opp_title}\n"
+                    f"Target Audience: {opp_audience}\n"
+                    f"Content Gap: {opp_gap}\n"
+                    f"Recommended Editorial Angle: {rec_angle}"
+                )
+                if strat_rationale:
+                    brief_context += f"\nStrategic Context: {strat_rationale}"
+            elif not brief_context and not req.brief_file_base64:
+                logger.warning(f"Opportunity with ID '{req.opportunity_id}' not found in database.")
+                raise ValueError(f"Opportunity '{req.opportunity_id}' not found.")
 
         client = self._get_client(req.api_key, getattr(req, "base_url", None))
         contents = []
@@ -118,6 +147,7 @@ You MUST respond with ONLY a valid, parseable JSON object matching this exact sc
       "email_cta_url": "https://trendcontenter.com/",
       "visual_direction": "string (detailed description for generating or photographing the hero visual)",
       "search_query": "string (concise 3-6 word Google image search query for finding authentic imagery)",
+      "veo_motion_prompt": "string (cinematic camera movement, lighting, subject action, and motion pacing for Google Veo video generation)",
       "hashtags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
       "audience_fit_score": 0.94
     }},
@@ -137,6 +167,7 @@ You MUST respond with ONLY a valid, parseable JSON object matching this exact sc
       "email_cta_url": "https://trendcontenter.com/",
       "visual_direction": "string",
       "search_query": "string",
+      "veo_motion_prompt": "string",
       "hashtags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
       "audience_fit_score": 0.91
     }},
@@ -156,6 +187,7 @@ You MUST respond with ONLY a valid, parseable JSON object matching this exact sc
       "email_cta_url": "https://trendcontenter.com/",
       "visual_direction": "string",
       "search_query": "string",
+      "veo_motion_prompt": "string",
       "hashtags": ["tag1", "tag2", "tag3", "tag4", "tag5"],
       "audience_fit_score": 0.88
     }}
@@ -198,15 +230,20 @@ You MUST respond with ONLY a valid, parseable JSON object matching this exact sc
         cleaned_json = cleaned_json.strip()
 
         try:
-            data = json.loads(cleaned_json)
+            data = json.loads(cleaned_json, strict=False)
         except Exception as e:
-            logger.error(f"Failed to parse Gemini experiments JSON: {e}\nRaw output: {raw_text[:500]}")
-            # Try regex extraction
-            match = re.search(r"(\{.*\})", raw_text, re.DOTALL)
-            if match:
-                data = json.loads(match.group(1))
-            else:
-                raise RuntimeError(f"Could not parse experiments response from Gemini: {e}") from e
+            try:
+                # Sanitize invalid backslash escape sequences from LLM text
+                sanitized = re.sub(r'\\([^"\\/bfnrtuU])', r'\1', cleaned_json)
+                data = json.loads(sanitized, strict=False)
+            except Exception:
+                logger.error(f"Failed to parse Gemini experiments JSON: {e}\nRaw output: {raw_text[:500]}")
+                match = re.search(r"(\{.*\})", raw_text, re.DOTALL)
+                if match:
+                    sanitized_match = re.sub(r'\\([^"\\/bfnrtuU])', r'\1', match.group(1))
+                    data = json.loads(sanitized_match, strict=False)
+                else:
+                    raise RuntimeError(f"Could not parse experiments response from Gemini: {e}") from e
 
         variants = []
         for i, item in enumerate(data.get("variants", [])):

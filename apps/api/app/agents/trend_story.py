@@ -48,13 +48,17 @@ async def synthesize_trend_story(state: InvestigationState) -> dict:
         for e in norm_ev if e.get("source_type") in ("web", "social")
     ][:6]
 
+    related_queries = state.get('related_topics', []) or []
+    related_str = ', '.join(related_queries) if related_queries else 'None'
+    topic = state.get('topic', '')
+
     prompt = f"""
     You are an expert trend analyst. 
     Analyze this real-time search spike using multi-source intelligence:
     
-    Topic: {state['topic']}
+    Topic: {topic}
     Region: {state.get('region', 'Global')}
-    Related Search Queries & Context: {', '.join(state.get('related_topics', [])) or 'None'}
+    Google Trends Related Search Queries & Context: {related_str}
     
     Existing YouTube Video Coverage Sampled:
     {chr(10).join(youtube_videos) or 'No video metadata available.'}
@@ -71,7 +75,11 @@ async def synthesize_trend_story(state: InvestigationState) -> dict:
     3. What concrete questions people are asking (questions).
     4. Key uncertainties.
     
-    CRITICAL GROUNDING RULES:
+    CRITICAL DISAMBIGUATION & CONTEXT GROUNDING RULES:
+    - The 'Google Trends Related Search Queries & Context' define why this search spike occurred in the real world.
+    - You MUST use these related queries ({related_str}) to disambiguate the topic.
+    - For example: if the topic is 'barcelona' and the related searches include 'fc barca', 'barca vs real madrid', etc., the spike is strictly about the football club and sporting events. All drivers and narratives MUST center on FC Barcelona football club, players, and match outcomes. You MUST strictly reject and discard any sampled web or video noise regarding Barcelona city travel, tourism, sightseeing, or vacation guides.
+    - NEVER allow the narrative to drift to unrelated homonyms, broad municipal/tourism topics, or off-topic entities unless the related search queries explicitly indicate that context.
     - Represent conclusions as interpretations of the sampled content and conversations.
     - Video popularity does not prove content quality; a small set of comments does not establish population-wide demand.
     - CITE real evidence_ids from the brackets above (e.g. ['ev_yt_...']) in supporting evidence fields.
@@ -88,20 +96,21 @@ async def synthesize_trend_story(state: InvestigationState) -> dict:
         }
     except Exception as e:
         print(f"Error in trend story generation: {e}")
-        topic = state.get("topic", "")
+        anchor = related_queries[0].strip() if related_queries else ""
+        context_label = f"{topic} ({anchor})" if anchor and anchor.lower() not in topic.lower() else topic
         # Derive fallback narratives and questions directly from observed evidence
         ev_ids = [e.get("evidence_id") for e in norm_ev[:3] if e.get("evidence_id")]
         fallback_narratives = [
             {
-                "name": f"Surging Public Attention on {topic}",
-                "description": f"Analysis of sampled video coverage and search trends shows rising interest and demand for authoritative guidance on {topic}.",
+                "name": f"Surging Public Attention on {context_label}",
+                "description": f"Analysis of search trends and multi-source signals shows rising interest and demand for authoritative updates regarding {context_label}.",
                 "evidence_ids": ev_ids,
                 "sentiment": "neutral"
             }
         ]
         fallback_questions = [
             {
-                "question": f"How do I get started with {topic} and what are common pitfalls?",
+                "question": f"What are the latest updates, developments, and key facts regarding {context_label}?",
                 "frequency_signal": "high",
                 "evidence_ids": ev_ids[:2]
             }
