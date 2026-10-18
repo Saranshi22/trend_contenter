@@ -1485,7 +1485,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
       [
         'Interpreting cinematic prompt semantics & temporal dynamics...',
         isImageToVideo ? 'Conditioning diffusion latents with starting frame image...' : 'Synthesizing scene geometry & lighting physics...',
-        'Simulating camera movement & temporal coherence with Google Veo 2...',
+        'Simulating camera movement & temporal coherence with Google Veo...',
         'Encoding cinematic MP4 stream and preparing interactive preview...'
       ],
       '#8B5CF6'
@@ -3748,7 +3748,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
             )}
           </div>
 
-          {/* CREATIVE MEDIA STUDIO SWITCHER: Images vs Google Veo 2 Cinematic Video */}
+          {/* CREATIVE MEDIA STUDIO SWITCHER: Images vs Google Veo Cinematic Video */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '14px' }}>
               <div style={{ display: 'inline-flex', background: '#F1F5F9', padding: '4px', borderRadius: '10px', border: '1px solid #CBD5E1' }}>
@@ -3794,8 +3794,8 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                   }}
                 >
                   <IconVideo size={15} />
-                  <span>Cinematic Video (Google Veo 2) {generatedVideos.length > 0 ? `(${generatedVideos.length})` : ''}</span>
-                  <span className="badge badge-purple" style={{ fontSize: '0.68rem', padding: '1px 6px', background: '#EDE9FE', color: '#7C3AED' }}>Veo 2</span>
+                  <span>Cinematic Video (Google Veo) {generatedVideos.length > 0 ? `(${generatedVideos.length})` : ''}</span>
+                  <span className="badge badge-purple" style={{ fontSize: '0.68rem', padding: '1px 6px', background: '#EDE9FE', color: '#7C3AED' }}>Veo</span>
                 </button>
               </div>
 
@@ -4029,7 +4029,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                                   cursor: 'pointer',
                                   transition: 'all 0.15s ease'
                                 }}
-                                title="Animate this candidate with Google Veo 2"
+                                title="Animate this candidate with Google Veo"
                               >
                                 <IconVideo size={12} />
                                 <span>Animate (Veo)</span>
@@ -4043,16 +4043,16 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                 </div>
               </div>
             ) : (
-              /* GOOGLE VEO 2 VIDEO GENERATION STUDIO */
+              /* GOOGLE VEO VIDEO GENERATION STUDIO */
               <div className="glass-card" style={{ border: '2px solid #8B5CF6', padding: '24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '14px', marginBottom: '16px' }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                      <span className="badge badge-purple" style={{ fontSize: '0.75rem', fontWeight: 700, background: '#EDE9FE', color: '#6D28D9' }}>Google Veo 2 Engine</span>
+                      <span className="badge badge-purple" style={{ fontSize: '0.75rem', fontWeight: 700, background: '#EDE9FE', color: '#6D28D9' }}>Google Veo Engine</span>
                       <span style={{ fontSize: '0.82rem', color: '#7C3AED', fontWeight: 600 }}>High-Fidelity Generative Video</span>
                     </div>
                     <h3 style={{ fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
-                      {startingImageForVideo ? 'Animate Candidate with Google Veo 2 (Image-to-Video)' : 'Generate Cinematic Campaign Video with Google Veo 2'}
+                      {startingImageForVideo ? 'Animate Candidate with Google Veo (Image-to-Video)' : 'Generate Cinematic Campaign Video with Google Veo'}
                     </h3>
                     <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>
                       {startingImageForVideo 
@@ -4116,7 +4116,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                     />
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: '0.84rem', fontWeight: 700, color: '#581C87' }}>Starting Frame Locked</div>
-                      <div style={{ fontSize: '0.78rem', color: '#7E22CE' }}>Veo 2 will use this image as the anchor frame and simulate fluid motion based on your prompt.</div>
+                      <div style={{ fontSize: '0.78rem', color: '#7E22CE' }}>Veo will use this image as the anchor frame and simulate fluid motion based on your prompt.</div>
                     </div>
                     <button 
                       type="button" 
@@ -4195,7 +4195,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                   {isGeneratingVideo ? (
                     <div style={{ height: '240px', borderRadius: '10px', background: '#FAF5FF', border: '1.5px dashed #C084FC', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
                       <span className="pulsing-cook-dot" style={{ background: '#7C3AED', width: '16px', height: '16px' }} />
-                      <span style={{ fontSize: '0.92rem', color: '#6D28D9', fontWeight: 600 }}>Google Veo 2 is rendering video temporal frames...</span>
+                      <span style={{ fontSize: '0.92rem', color: '#6D28D9', fontWeight: 600 }}>Google Veo is rendering video temporal frames...</span>
                       <span style={{ fontSize: '0.78rem', color: '#9333EA' }}>This high-fidelity generation simulates fluid physics and photorealistic motion.</span>
                     </div>
                   ) : generatedVideos.length === 0 ? (
@@ -4305,7 +4305,7 @@ export const ContentStudioPage: React.FC<ContentStudioPageProps> = ({
                       <span className="badge badge-emerald">Ready</span>
                       {(heroAsset.media_type === 'video' || heroAsset.url.endsWith('.mp4')) && (
                         <span className="badge badge-purple" style={{ background: '#EDE9FE', color: '#7C3AED', fontSize: '0.72rem' }}>
-                          Google Veo 2
+                          Google Veo
                         </span>
                       )}
                     </div>
