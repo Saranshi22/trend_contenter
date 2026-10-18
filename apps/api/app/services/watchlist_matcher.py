@@ -231,7 +231,6 @@ async def evaluate_watchlist_triggers(
                 return False
 
             topic = str(trend_dict.get("topic", "")).lower()
-            cat = str(trend_dict.get("category", "")).lower()
             raw_bd = trend_dict.get("trend_breakdown")
             bd_text = ""
             if isinstance(raw_bd, list):
@@ -239,8 +238,16 @@ async def evaluate_watchlist_triggers(
             elif isinstance(raw_bd, str):
                 bd_text = raw_bd.lower()
 
-            searchable = f"{topic} {cat} {bd_text}"
-            return any(kw in searchable for kw in keywords)
+            searchable = f"{topic} {bd_text}"
+            for kw in keywords:
+                clean_kw = kw.strip().lower()
+                if not clean_kw:
+                    continue
+                # Use word-boundary regex matching to avoid substring false positives (e.g. 'ai' matching 'entertainment' or 'saints')
+                pattern = rf"\b{re.escape(clean_kw)}\b"
+                if re.search(pattern, searchable, re.IGNORECASE):
+                    return True
+            return False
 
         matching_trends = [t for t in trends_to_check if matches_watchlist(t)]
 
